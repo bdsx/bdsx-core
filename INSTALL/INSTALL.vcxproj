@@ -89,13 +89,16 @@
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">call %(identity) "$(OutDir)" "$(Configuration)" "$(SolutionDir)"</Command>
       <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">call %(identity) "$(OutDir)" "$(Configuration)" "$(SolutionDir)"</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(UserProfile)\.bds\mods\bdsx.dll;$(UserProfile)\.bds\mods\libmariadb.dll;$(UserProfile)\.bds\mods\libcurl$(_debug).dll;$(UserProfile)\.bds\mods\bdsx_node.dll;%(Outputs)</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)bdsx-node\mods\bdsx.dll;$(SolutionDir)bdsx-node\mods\bdsx.pdb;$(SolutionDir)bdsx-node\bedrock_server\ChakraCore.dll;$(SolutionDir)bdsx-node\bedrock_server\Chakra.dll;%(Outputs)</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(UserProfile)\.bds\mods\bdsx.dll;$(UserProfile)\.bds\mods\libmariadb.dll;$(UserProfile)\.bds\mods\libcurl$(_debug).dll;$(UserProfile)\.bds\mods\bdsx_node.dll;%(Outputs)</Outputs>
-      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)bdsx.dll;$(OutDir)libmariadb.dll;$(OutDir)libcurl$(_debug).dll;$(OutDir)bdsx_node.dll</AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)bdsx.dll;$(OutDir)bdsx.pdb;$(OutDir)Chakra.dll;$(OutDir)ChakraCore.dll</AdditionalInputs>
       <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)bdsx.dll;$(OutDir)libmariadb.dll;$(OutDir)libcurl$(_debug).dll;$(OutDir)node.dll</AdditionalInputs>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\elementminus\elementminus\elementminus.vcxproj">
+      <Project>{0f3e875d-4c92-4858-bb07-3c0fe8e74064}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\bdsx\bdsx.vcxproj">
       <Project>{31964e2c-9e3d-4c98-a17b-589e322aa174}</Project>
     </ProjectReference>

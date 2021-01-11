@@ -1,3 +1,4 @@
+#include "stdafx.h"
 #include "encoding.h"
 
 using namespace kr;
@@ -38,7 +39,7 @@ JsValue ExEncoding::jsdecode(JsValue buffer, int encoding) throws(JsException)
 	if (encoding == BUFFER)
 	{
 		JsValue out = JsNewArray(2);
-		out.set(0, buffer);
+		out.set((int)0, buffer);
 		out.set(1, intact<int>(buf.size()));
 		return out;
 	}

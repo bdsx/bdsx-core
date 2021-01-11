@@ -1,55 +1,56 @@
 #pragma once
 
-typedef void* JsRuntimeHandle;
-typedef void* JsRef;
-typedef JsRef JsContextRef;
+#include <chrono>
+#include <KR3/mt/atomicqueue.h>
+
+using std::chrono::high_resolution_clock;
+using hd_point_t = high_resolution_clock::time_point;
+using hd_dura_t = high_resolution_clock::duration;
 
 namespace nodegate
 {
-	struct StringView
-	{
-		const char16_t* string;
-		size_t length;
+	using dtor_t = void(*)(void*);
+	using ctor_t = dtor_t(*)(void*, void*);
 
-#ifdef __KR3_INCLUDED
-		inline StringView(kr::Text16 text) noexcept {
-			string = text.data();
-			length = text.size();
-		}
-#endif
-	};
-	class JsCall
-	{
-	public:
-		virtual void callMain() noexcept = 0;
-		virtual void require(StringView a) noexcept = 0;
-		virtual void log(StringView a) noexcept = 0;
-		virtual void error(StringView a) noexcept = 0;
-		virtual void tickCallback() noexcept = 0;
-	};
-	class NodeGateConfig
-	{
-	public:
-		int argc;
-		char** argv;
-
-		virtual void main_call(JsCall* jscall) noexcept = 0;
-		virtual void stderr_call(const char * str, size_t len) noexcept = 0;
-		virtual void stdout_call(const char* str, size_t len) noexcept = 0;
-	};
-
-	void initNativeModule(void* jsvalue);
-	int start(NodeGateConfig* arg) noexcept;
-
-#ifdef NODEGATE_EXPORT
-#define NODEGATE_EXPORT_ __declspec(dllexport) __stdcall
-#else
-#define NODEGATE_EXPORT_ __declspec(dllimport) __stdcall
-#endif
-	void NODEGATE_EXPORT_ setMainCallback(NodeGateConfig* _config) noexcept;
-	void NODEGATE_EXPORT_ nodeProcessTimer() noexcept;
-	bool NODEGATE_EXPORT_ isAlive() noexcept;
-
-
+	void initNativeModule(void* exports) noexcept;
+	void clearNativeModule() noexcept;
+	int start(int argc, char** argv) noexcept;
+	void loop(uint64_t hd_point) noexcept;
 }
-extern nodegate::JsCall* g_call;
+
+class AsyncTask :public kr::AtomicQueueNode
+{
+public:
+	void (* const fn)(AsyncTask*);
+
+	AsyncTask(void (* fn)(AsyncTask*)) noexcept;
+	~AsyncTask() noexcept override;
+	void post() noexcept;
+
+	static void open() noexcept;
+	static void close() noexcept;
+	static AsyncTask* alloc(void (*cb)(AsyncTask*), size_t size) noexcept;
+	static void call(void (*cb)(AsyncTask*)) noexcept;
+
+	template <typename LAMBDA>
+	static void post(LAMBDA && lambda) noexcept
+	{
+		class LambdaAsyncTask:public AsyncTask
+		{
+		private:
+			LAMBDA m_lambda;
+
+		public:
+			LambdaAsyncTask(LAMBDA&& lambda) noexcept
+				:AsyncTask([](AsyncTask* task){
+				static_cast<LambdaAsyncTask*>(task)->m_lambda();
+					}), 
+				m_lambda(std::forward<LAMBDA>(lambda))
+			{
+			}
+		};
+
+		(_new LambdaAsyncTask(std::forward<LAMBDA>(lambda)))->post();
+	}
+};
+

@@ -1,60 +1,121 @@
+#include "stdafx.h"
 #include "jsctx.h"
-#include "native.h"
+
 #include <KR3/win/windows.h>
-#include <KR3/msg/pump.h>
+#include <conio.h>
+
+#define USE_EDGEMODE_JSRT
+#include <jsrt.h>
 
 using namespace kr;
 
-Manual<JsContext> g_ctx;
-
 namespace
 {
-	bool s_ctxCreated = false;
-	DWORD contextThreadId;
+	JsContextRef getJsrtContext() noexcept
+	{
+		JsContextRef ctx;
+		JsRuntimeRef runtime;
+		JsGetCurrentContext(&ctx);
+		if (ctx == nullptr)
+		{
+			cerr << "[BDSX] The chakra context is not found" << endl;
+			cerr << "[BDSX] Failed to run BDSX" << endl;
+			terminate(-1);
+		}
+		JsGetRuntime(ctx, &runtime);
+		JsRuntime::setRuntime(runtime);
+		return ctx;
+	}
 }
 
-void createJsContext(kr::JsRawContext newContext) noexcept
+MainContext::MainContext() noexcept
+	:JsContext(getJsrtContext())
 {
-	if (s_ctxCreated) g_ctx.remove();
-	g_ctx.create(newContext);
-	s_ctxCreated = true;
-	contextThreadId = GetCurrentThreadId();
+	enter();
 
-	g_ctx->enter();
-	g_native.create();
-	g_ctx->exit();
-}
-void destroyJsContext() noexcept
-{
-	if (!s_ctxCreated) return;
-	s_ctxCreated = false;
-	JsContext::_cleanForce();
-	g_ctx->enter();
 	try
 	{
-		EventPump::getInstance()->waitAll();
+		JsScope _scope;
+		JsValue array = JsRuntime::run(u"[process._tickCallback, function(){console.log.apply(console, arguments)}, function(){console.error.apply(console, arguments)}]");
+		m_tickCallback = array.get(0);
+		m_console_log = array.get(1);
+		m_console_error = array.get(2);
 	}
-	catch (QuitException&)
+	catch (JsException& err)
 	{
+		Text16 tx = err.toString();
+		cerr << (Utf16ToAnsi)tx << endl;
+		cerr << "[BDSX] basic node functions are not found" << endl;
+		cerr << "[BDSX] Failed to run BDSX" << endl;
+		terminate(-1);
 	}
-	g_native.remove();
-	g_ctx->exit();
-	g_ctx.remove();
+	exit();
 }
-bool isContextExisted() noexcept
+MainContext::~MainContext() noexcept
 {
-	return s_ctxCreated;
-}
-void checkCurrentThread() noexcept
-{
-	_assert(isContextThread());
-}
-bool isContextThread() noexcept
-{
-	return GetCurrentThreadId() == contextThreadId;
-}
-uint32_t getContextThreadId() noexcept
-{
-	return contextThreadId;
+	{
+		JsScope _scope;
+		m_tickCallback = JsValue();
+		m_console_log = JsValue();
+		m_console_error = JsValue();
+	}
+	JsContext::_cleanStackCounter();
 }
 
+void MainContext::log(kr::Text16 tx) noexcept
+{
+	try
+	{
+		JsValue(m_console_log).call(tx);
+	}
+	catch (JsException& err)
+	{
+		cerr << (Utf16ToAnsi)err.toString() << endl;
+	}
+}
+void MainContext::error(kr::Text16 tx) noexcept
+{
+	try
+	{
+		JsValue(m_console_error).call(tx);
+	}
+	catch (JsException& err)
+	{
+		cerr << (Utf16ToAnsi)err.toString() << endl;
+	}
+}
+void MainContext::error(const kr::JsException& err) noexcept
+{
+	try
+	{
+		JsValue stack = err.getValue().get(u"stack");
+		if (stack == undefined) stack = err.toString();
+		g_ctx->error(stack.cast<Text16>());
+	}
+	catch (JsException& err)
+	{
+		cerr << (Utf16ToAnsi)err.toString() << endl;
+	}
+	catch (...)
+	{
+		cerr << "[Error in error]" << endl;
+	}
+}
+void MainContext::_tickCallback() noexcept
+{
+	try
+	{
+		JsValue(m_tickCallback).call();
+	}
+	catch (JsException& err)
+	{
+		error(err);
+	}
+}
+
+Manual<MainContext> g_ctx;
+
+JsContextRef getBdsxJsContextRef() noexcept
+{
+	return g_ctx->getRaw();
+}

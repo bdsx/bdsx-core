@@ -1,6 +1,0 @@
-/tsconfig.json
-/.vscode
-/package
-*.ts
-!*.d.ts
-*.js.map

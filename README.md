@@ -77,6 +77,7 @@ https://discord.gg/pC9XdkC
 [Visual Studio 2019](https://visualstudio.microsoft.com/)  
 [Visual Studio Code](https://code.visualstudio.com/)  
 [NASM](https://www.nasm.us/) & Set PATH - It's needed by node-chakracore  
+[Python2.x](https://www.python.org/downloads/release/python-2718/) & Set PATH - It's needed by node-chakracore  
 
 1. Clone BDSX and ken.(personal library project)  
 **[parent directory]**  

@@ -61,13 +61,13 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>$(ProjectDir)..\RakNet\Source;$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)node-chakracore\$(Configuration)\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>$(ProjectDir)..\RakNet\Source;$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)node-chakracore\$(Configuration)\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">
-    <IncludePath>$(ProjectDir)..\RakNet\Source;$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)node-chakracore\$(Configuration)\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile />
@@ -85,6 +85,10 @@ echo #define BUILD_TIME "%25date%-%time2:.=%"&gt;"gen/buildtime.h"</Command>
     <ClCompile />
     <PostBuildEvent />
     <PostBuildEvent />
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile />
@@ -104,6 +108,10 @@ set time2=%time::=%
 echo #define BUILD_TIME "%25date%-%time2:.=%"&gt;"gen/buildtime.h"</Command>
     </PreBuildEvent>
     <ClCompile />
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+    </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">
     <ClCompile />
@@ -120,130 +128,69 @@ echo #define BUILD_TIME "%25date%-%time2:.=%"&gt;"gen/buildtime.h"</Command>
     </PreBuildEvent>
     <ClCompile />
     <PostBuildEvent />
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+    </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="codewrite.cpp" />
-    <ClCompile Include="console.cpp" />
+    <ClCompile Include="mtqueue.cpp" />
+    <ClCompile Include="uvasync.cpp" />
+    <ClCompile Include="structurepointer.cpp" />
+    <ClCompile Include="cachedpdb.cpp" />
+    <ClCompile Include="iatdll.cpp" />
     <ClCompile Include="encoding.cpp" />
-    <ClCompile Include="mariadb.cpp" />
-    <ClCompile Include="nativecall.cpp" />
-    <ClCompile Include="nativetype.cpp" />
-    <ClCompile Include="nativemodule.cpp" />
-    <ClCompile Include="fs.cpp" />
-    <ClCompile Include="mcf.cpp" />
+    <ClCompile Include="sehandler.cpp" />
+    <ClCompile Include="voidpointer.cpp" />
+    <ClCompile Include="jshook.cpp" />
+    <ClCompile Include="makefunc.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="jsctx.cpp" />
-    <ClCompile Include="native.cpp" />
-    <ClCompile Include="nativefile.cpp" />
     <ClCompile Include="nativepointer.cpp" />
-    <ClCompile Include="nethook.cpp" />
-    <ClCompile Include="networkidentifier.cpp" />
-    <ClCompile Include="actor.cpp" />
-    <ClCompile Include="nodecall.cpp" />
+    <ClCompile Include="netfilter.cpp" />
     <ClCompile Include="nodegate.cpp">
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\node-chakracore\src;..\node-chakracore\deps\chakrashim\include;..\node-chakracore\deps\chakrashim;..\node-chakracore\deps\icu-small\source\i18n;..\node-chakracore\deps\icu-small\source\common;..\node-chakracore\deps\zlib;..\node-chakracore\deps\http_parser;..\node-chakracore\deps\cares\include;..\node-chakracore\deps\uv\include;..\node-chakracore\deps\nghttp2\lib\includes;..\node-chakracore\deps\openssl\openssl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">..\node-chakracore\src;..\node-chakracore\deps\chakrashim\include;..\node-chakracore\deps\chakrashim;..\node-chakracore\deps\icu-small\source\i18n;..\node-chakracore\deps\icu-small\source\common;..\node-chakracore\deps\zlib;..\node-chakracore\deps\http_parser;..\node-chakracore\deps\cares\include;..\node-chakracore\deps\uv\include;..\node-chakracore\deps\nghttp2\lib\includes;..\node-chakracore\deps\openssl\openssl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\node-chakracore\src;..\node-chakracore\deps\chakrashim\include;..\node-chakracore\deps\chakrashim;..\node-chakracore\deps\icu-small\source\i18n;..\node-chakracore\deps\icu-small\source\common;..\node-chakracore\deps\zlib;..\node-chakracore\deps\http_parser;..\node-chakracore\deps\cares\include;..\node-chakracore\deps\uv\include;..\node-chakracore\deps\nghttp2\lib\includes;..\node-chakracore\deps\openssl\openssl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
-    <ClCompile Include="reverse.cpp" />
-    <ClCompile Include="sharedptr.cpp" />
     <ClCompile Include="staticpointer.cpp" />
-    <ClCompile Include="watcher.cpp" />
-    <ClCompile Include="webserver.cpp" />
+    <ClCompile Include="stdafx.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="codewrite.h" />
-    <ClInclude Include="common.h" />
-    <ClInclude Include="console.h" />
+    <ClInclude Include="mtqueue.h" />
+    <ClInclude Include="uvasync.h" />
+    <ClInclude Include="structurepointer.h" />
+    <ClInclude Include="cachedpdb.h" />
+    <ClInclude Include="iatdll.h" />
     <ClInclude Include="encoding.h" />
-    <ClInclude Include="mariadb.h" />
-    <ClInclude Include="nativecall.h" />
-    <ClInclude Include="nativetype.h" />
-    <ClInclude Include="nativemodule.h" />
-    <ClInclude Include="fs.h" />
-    <ClInclude Include="mcf.h" />
+    <ClInclude Include="sehandler.h" />
+    <ClInclude Include="voidpointer.h" />
+    <ClInclude Include="jshook.h" />
+    <ClInclude Include="makefunc.h" />
     <ClInclude Include="jsctx.h" />
-    <ClInclude Include="native.h" />
-    <ClInclude Include="nativefile.h" />
     <ClInclude Include="nativepointer.h" />
-    <ClInclude Include="nethook.h" />
-    <ClInclude Include="networkidentifier.h" />
-    <ClInclude Include="actor.h" />
-    <ClInclude Include="nodecall.h" />
+    <ClInclude Include="netfilter.h" />
     <ClInclude Include="nodegate.h" />
-    <ClInclude Include="resource.h" />
-    <ClInclude Include="reverse.h" />
-    <ClInclude Include="sharedptr.h" />
     <ClInclude Include="staticpointer.h" />
-    <ClInclude Include="watcher.h" />
-    <ClInclude Include="webserver.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="stdafx.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ken\KR3\KR3.vcxproj">
       <Project>{f5212e7b-4791-4488-a23a-57af3023e7d3}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\ken\KRMySQL\KRMySQL.vcxproj">
-      <Project>{e25f0c5a-72ce-481e-8f08-c36ac5ad9666}</Project>
-    </ProjectReference>
     <ProjectReference Include="..\..\ken\KRWin\KRWin.vcxproj">
       <Project>{432cc3c8-34b1-405d-9675-36fdf25289c7}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\node-chakracore\node_lib.vcxproj">
-      <Project>{bb1bff01-bba9-3885-7a95-1e5372405cd3}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\RakNetProject\LibStatic_vc9.vcxproj">
-      <Project>{6533bdae-0f0c-45e4-8fe7-add0f37fe063}</Project>
+    <ProjectReference Include="..\node-chakracore-build\node-chakracore-build.vcxproj">
+      <Project>{cf64aea3-4836-4179-baa4-bfac5f505fb1}</Project>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="bdsx.rc" />
-  </ItemGroup>
-  <ItemGroup>
-    <CustomBuild Include="version.bat">
-      <FileType>Document</FileType>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">call %(identity)
-mkdir gen 2&gt;nul
-(
-echo #define BDS_VERSION "%25BDS_VERSION%"
-)&gt;gen/%(Filename).h
-mkdir ../bdsx-node/gen 2&gt;nul
-(
-echo {
-echo     "BDS_VERSION": "%25BDS_VERSION%"
-echo }
-)&gt;../bdsx-node/gen/%(Filename).json
-set errorlevel=0</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">gen/%(Filename).h;../bdsx-node/gen/%(Filename).json</Outputs>
-      <Command Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">call %(identity)
-mkdir gen 2&gt;nul
-(
-echo #define BDS_VERSION "%25BDS_VERSION%"
-)&gt;gen/%(Filename).h
-mkdir ../bdsx-node/gen 2&gt;nul
-(
-echo {
-echo     "BDS_VERSION": "%25BDS_VERSION%"
-echo }
-)&gt;../bdsx-node/gen/%(Filename).json
-set errorlevel=0</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">gen/%(Filename).h;../bdsx-node/gen/%(Filename).json</Outputs>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">call %(identity)
-mkdir gen 2&gt;nul
-(
-echo #define BDS_VERSION "%25BDS_VERSION%"
-)&gt;gen/%(Filename).h
-mkdir ../bdsx-node/gen 2&gt;nul
-(
-echo {
-echo     "BDS_VERSION": "%25BDS_VERSION%"
-echo }
-)&gt;../bdsx-node/gen/%(Filename).json
-set errorlevel=0</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">gen/%(Filename).h;../bdsx-node/gen/%(Filename).json</Outputs>
-      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(Identity)</Message>
-      <Message Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">%(Identity)</Message>
-      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(Identity)</Message>
-    </CustomBuild>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

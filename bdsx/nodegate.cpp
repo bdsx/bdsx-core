@@ -1,32 +1,190 @@
+#include "stdafx.h"
 #include "nodegate.h"
-#include <KR3/main.h>
 
-#define BUILDING_NODE_EXTENSION
-
-#pragma comment(lib, "bdsx_node.lib")
-
+#define BUILDING_CHAKRASHIM
 #pragma warning(push, 0)
 #include "node.h"
+#include "uv.h"
 #pragma warning(pop)
 
-nodegate::JsCall* g_call;
+#pragma comment(lib, "chakracore.lib")
+#pragma comment(lib, "cares.lib")
+#pragma comment(lib, "chakrashim.lib")
+#pragma comment(lib, "http_parser.lib")
+#pragma comment(lib, "icudata.lib")
+#pragma comment(lib, "icui18n.lib")
+#pragma comment(lib, "icustubdata.lib")
+#pragma comment(lib, "icutools.lib")
+#pragma comment(lib, "icuucx.lib")
+#pragma comment(lib, "libuv.lib")
+#pragma comment(lib, "nghttp2.lib")
+#pragma comment(lib, "node.lib")
+#pragma comment(lib, "openssl.lib")
+#pragma comment(lib, "zlib.lib")
 
-int nodegate::start(NodeGateConfig* ngc) noexcept
-{
-    setMainCallback(ngc);
-    return node::Start(ngc->argc, ngc->argv);
-}
+#pragma comment(lib, "psapi.lib")
+#pragma comment(lib, "dbghelp.lib")
+#pragma comment(lib, "Iphlpapi.lib")
+#pragma comment(lib, "Userenv.lib")
+#pragma comment(lib, "Crypt32.lib")
+#pragma comment(lib, "Version.lib")
+
+using std::pair;
+
+JsContextRef getBdsxJsContextRef() noexcept;
 
 namespace
 {
-    struct NativeModule
+    kr::AtomicQueue s_atomicQueue;
+    uv_async_t s_processTask;
+    intptr_t s_asyncRef;
+    bool s_inited;
+    bool s_checkAsyncInAsync = false;
+
+    constexpr size_t INIT_COUNT = 30;
+
+    void clear() noexcept
     {
-        static void init(v8::Local<v8::Object> exports)
+        if (!s_inited) return;
+        s_inited = false;
+        nodegate::clearNativeModule();
+    }
+
+    void init(
+        v8::Local<v8::Object> exports,
+        v8::Local<v8::Value> module,
+        v8::Local<v8::Context> context) noexcept
+    {
+        s_inited = true;
+
+        v8::Isolate* isolate = context->GetIsolate();
+        node::AddEnvironmentCleanupHook(isolate, [](void*) { clear();  }, nullptr);
+        nodegate::initNativeModule(*exports);
+        atexit(clear);
+    }
+
+}
+NODE_MODULE_CONTEXT_AWARE(bdsx_core, init);
+
+int nodegate::start(int argc, char** argv) noexcept
+{
+    return node::Start(argc, argv);
+}
+void nodegate::loop(uint64_t hd_point) noexcept
+{
+    if (s_checkAsyncInAsync)
+    {
+        if (s_asyncRef == 0) return;
+        uv_async_send(&s_processTask);
+        s_checkAsyncInAsync = false;
+    }
+
+    constexpr int64_t milli2nano = std::nano::den / std::milli::den;
+
+    uv_loop_t* loop = uv_default_loop();
+    
+    int64_t duramilli = ((hd_point_t&)hd_point - high_resolution_clock::now()).count() / milli2nano;
+    if (duramilli <= 0)
+    {
+        int counter = 0;
+        for (;;)
         {
-            v8::Object* obj = *exports;
-            nodegate::initNativeModule(obj);
+            counter++;
+            if (uv_run(loop, UV_RUN_NOWAIT) == 0) break;
+            if (counter > 30) break;
         }
+        return;
+    }
+
+    struct Timer:uv_timer_t
+    {
+        bool done = false;
     };
+    Timer awakeTimer;
+    uv_timer_init(uv_default_loop(), &awakeTimer);
+    uv_timer_start(&awakeTimer, [](uv_timer_t* timer){
+        static_cast<Timer*>(timer)->done = true;
+        uv_stop(uv_default_loop());
+        }, duramilli, 0);
+
+    for (;;)
+    {
+        uv_run(loop, UV_RUN_DEFAULT);
+
+        v8::Isolate* isolate = v8::Isolate::GetCurrent();
+        node::MultiIsolatePlatform* platform = node::GetMainThreadMultiIsolatePlatform();
+        platform->DrainTasks(isolate);
+
+        if (awakeTimer.done) break;
+    }
 }
 
-NODE_MODULE(bdsx_native, NativeModule::init);
+AsyncTask::AsyncTask(void (*fn)(AsyncTask*)) noexcept
+    :fn(fn)
+{
+}
+AsyncTask::~AsyncTask() noexcept
+{
+}
+void AsyncTask::post() noexcept
+{
+    _assert(s_asyncRef != 0);
+
+    size_t count = s_atomicQueue.enqueue(this);
+    if (count == 1)
+    {
+        uv_async_send(&s_processTask);
+    }
+}
+void AsyncTask::open() noexcept
+{
+    if (s_asyncRef++ == 0)
+    {
+        uv_loop_t* uv = uv_default_loop();
+        uv_async_init(uv, &s_processTask, (uv_async_cb)[](uv_async_t*) {
+            for (;;)
+            {
+                auto pair = s_atomicQueue.dequeue();
+                if (pair.first == nullptr)
+                {
+                    if (s_asyncRef == 0) return;
+                    uv_async_send(&s_processTask);
+                    break;
+                }
+
+                AsyncTask* task = static_cast<AsyncTask*>(pair.first);
+                if (pair.second != 0)
+                {
+                    s_checkAsyncInAsync = true;
+                    task->fn(task);
+                    task->release();
+                    s_checkAsyncInAsync = false;
+                }
+                else
+                {
+                    task->fn(task);
+                    task->release();
+                    break;
+                }
+            }
+            });
+    }
+}
+void AsyncTask::close() noexcept
+{
+    if (--s_asyncRef == 0)
+    {
+        uv_close((uv_handle_t*)&s_processTask, nullptr);
+    }
+}
+AsyncTask* AsyncTask::alloc(void (*cb)(AsyncTask*), size_t size) noexcept
+{
+    AsyncTask* data = (AsyncTask*)malloc(size + sizeof(AsyncTask));
+    new(data) AsyncTask(cb);
+    reline_new(data);
+    return data;
+}
+void AsyncTask::call(void (*cb)(AsyncTask*)) noexcept
+{
+    (_new AsyncTask(cb))->post();
+}

@@ -1,0 +1,1458 @@
+#include "stdafx.h"
+#include "makefunc.h"
+#include "nodegate.h"
+
+#include <KR3/util/stackgc.h>
+#include <KR3/util/wide.h>
+#include <KR3/win/windows.h>
+#include <KRWin/hook.h>
+#include <KR3/js/js.h>
+
+#include "nativepointer.h"
+
+#define USE_EDGEMODE_JSRT
+#include <jsrt.h>
+
+#pragma comment(lib, "chakrart.lib")
+
+using namespace kr;
+using namespace hook;
+
+enum class RawTypeId :int
+{
+	Int32,
+	FloatAsInt64,
+	Float,
+	StringAnsi,
+	StringUtf8,
+	StringUtf16,
+	Buffer,
+	Bin64,
+	Boolean,
+	JsValueRef,
+	Void,
+	PointerOrWrapper,
+	StructureReturn
+};
+
+namespace
+{
+	uintptr_t last_allocate = 1;
+	void* returnPoint = nullptr;
+
+	struct DeferField
+	{
+		JsPropertyId pointer = u"pointer";
+		JsValue js2np = JsNewSymbol((JsValue)u"makefunc.js2np");
+		JsValue np2js = JsNewSymbol((JsValue)u"makefunc.np2js");
+		JsPropertyId js2np_prop = JsPropertyId::fromSymbol(js2np);
+		JsPropertyId np2js_prop = JsPropertyId::fromSymbol(np2js);
+	};
+	Deferred<DeferField> s_field(JsRuntime::initpack);
+
+	void* makeGetOutFunction() noexcept
+	{
+		JitFunction func(256);
+		func.mov(RDX, (qword)&returnPoint);
+		func.mov(RSP, QwordPtr, RDX);
+		func.pop(RDI);
+		func.pop(RSI);
+		func.pop(RBP);
+		func.pop(RCX);
+		func.mov(QwordPtr, RDX, RCX);
+		func.xor_(RAX, RAX);
+		func.ret();
+		return func.pointer();
+	}
+	void (* const _getout)() = (autoptr)makeGetOutFunction();
+
+	void* stack_alloc(size_t size) noexcept
+	{
+		StackAllocator* alloc = StackAllocator::getInstance();
+		void* p = alloc->allocate(8 + size);
+		*(uintptr_t*)p = last_allocate;
+		last_allocate = (uintptr_t)p;
+		return (byte*)p + 8;
+	}
+
+	void stack_free_all() noexcept
+	{
+
+		uintptr_t p = last_allocate;
+		if (p & 1) return;
+
+		StackAllocator* alloc = StackAllocator::getInstance();
+		for (;;)
+		{
+			void* orip = (void*)(p & ~1);
+			p = *(uintptr_t*)orip;
+			alloc->free(orip);
+			if (p & 1)
+			{
+				last_allocate = p;
+				break;
+			}
+		}
+	}
+
+	JsValueRef makeError(Text16 text) noexcept
+	{
+		JsValueRef message;
+		JsValueRef error;
+		JsErrorCode err;
+
+		err = JsPointerToString(wide(text.data()), text.size(), &message);
+		_assert(err == JsNoError);
+		err = JsCreateError(message, &error);
+		_assert(err == JsNoError);
+		return error;
+	}
+
+	void getout_jserror(JsValueRef error) noexcept
+	{
+		stack_free_all();
+		JsErrorCode err = JsSetException(error);
+		_assert(err == JsNoError);
+		_getout();
+	}
+
+	ATTR_NORETURN void getout_invalid_parameter(uint32_t paramNum) noexcept
+	{
+		JsValueRef error;
+		if (paramNum <= 0) error = makeError(u"Invalid parameter at this");
+		else error = makeError(TSZ16() << u"Invalid parameter at " << (paramNum));
+		getout_jserror(error);
+	}
+	ATTR_NORETURN void getout_invalid_parameter_count(uint32_t current, uint32_t needs) noexcept
+	{
+		JsValueRef error = makeError(TSZ16() << u"Invalid parameter count " << current << u", needs " << needs);
+		getout_jserror(error);
+	}
+	void _throwJsrtError(JsErrorCode err) throws(JsValue, JsException)
+	{
+		JsValueRef exception;
+		if (JsGetAndClearException(&exception) == JsNoError)
+		{
+			throw (JsValue)(JsRawData)exception;
+		}
+		else
+		{
+			throw JsException(TSZ16() << u"JsErrorCode: 0x" << kr::hexf((int)err));
+		}
+	}
+	ATTR_NORETURN void getout(JsErrorCode err) noexcept
+	{
+		bool has;
+		if ((JsHasException(&has) == JsNoError) && has)
+		{
+			stack_free_all();
+			_getout();
+		}
+		else
+		{
+			JsValueRef error = makeError(TSZ16() << u"JsErrorCode: 0x" << kr::hexf((int)err));
+			getout_jserror(error);
+		}
+	}
+
+	char* stack_ansi(JsValueRef value, uint32_t paramNum) noexcept
+	{
+		try
+		{
+			JsValue jsvalue = ((JsRawData)value);
+			switch (jsvalue.getType())
+			{
+			case JsType::Null: return nullptr;
+			case JsType::String: {
+				Utf16ToUtf8 dec = jsvalue.as<Text16>();
+				size_t size = dec.size();
+				char* out = (char*)stack_alloc(size + 1);
+				dec.copyTo(out);
+				out[size] = '\0';
+				return out;
+			}
+			}
+		}
+		catch (...)
+		{
+		}
+		getout_invalid_parameter(paramNum);
+	}
+
+	char* stack_utf8(JsValueRef value, uint32_t paramNum) noexcept
+	{
+		try
+		{
+			JsValue jsvalue = ((JsRawData)value);
+			switch (jsvalue.getType())
+			{
+			case JsType::Null: return nullptr;
+			case JsType::String: {
+				Utf16ToUtf8 dec = jsvalue.as<Text16>();
+				size_t size = dec.size();
+				char* out = (char*)stack_alloc(size + 1);
+				dec.copyTo(out);
+				out[size] = '\0';
+				return out;
+			}
+			}
+		}
+		catch (...)
+		{
+		}
+		getout_invalid_parameter(paramNum);
+	}
+
+	void* buffer_to_pointer(JsValueRef value, uint32_t paramNum) noexcept
+	{
+		try
+		{
+			JsValue jsvalue = ((JsRawData)value);
+			switch (jsvalue.getType())
+			{
+			case JsType::Null: return nullptr;
+			case JsType::ArrayBuffer:
+				return jsvalue.getArrayBuffer().data();
+			case JsType::TypedArray:
+				return jsvalue.getTypedArrayBuffer().data();
+			case JsType::DataView:
+				return jsvalue.getDataViewBuffer().data();
+			case JsType::Object:
+				VoidPointer* ptr = jsvalue.getNativeObject<VoidPointer>();
+				if (ptr != nullptr) return ptr->getAddressRaw();
+				break;
+			}
+		}
+		catch (...)
+		{
+		}
+		getout_invalid_parameter(paramNum);
+	}
+
+	const char16_t* js2np_utf16(JsValueRef value, uint32_t paramNum) noexcept
+	{
+		try
+		{
+			JsValue jsvalue = ((JsRawData)value);
+			switch (jsvalue.getType())
+			{
+			case JsType::Null: return nullptr;
+			case JsType::String:
+				return jsvalue.as<Text16>().data();
+			}
+		}
+		catch (...)
+		{
+		}
+		getout_invalid_parameter(paramNum);
+	}
+
+	JsValueRef np2js_ansi(pcstr str, uint32_t paramNum) noexcept
+	{
+		JsErrorCode err;
+		JsValueRef out;
+		{
+			TSZ16 buf;
+			buf << (AnsiToUtf16)(Text)str;
+
+			err = JsPointerToString(wide(buf.data()), buf.size(), &out);
+		}
+		if (err != JsNoError) getout_invalid_parameter(paramNum);
+		return out;
+	}
+
+	JsValueRef np2js_utf8(pcstr str, uint32_t paramNum) noexcept
+	{
+		JsValueRef out;
+		JsErrorCode err;
+
+		{
+			TSZ16 buf;
+			buf << (Utf8ToUtf16)(Text)str;
+			err = JsPointerToString(wide(buf.data()), buf.size(), &out);
+		}
+		if (err != JsNoError) getout_invalid_parameter(paramNum);
+		return out;
+	}
+
+	JsValueRef np2js_utf16(pcstr16 str, uint32_t paramNum) noexcept
+	{
+		JsValueRef out;
+		JsErrorCode err = JsPointerToString(wide(str), wcslen(wide(str)), &out);
+		if (err != JsNoError) getout_invalid_parameter(paramNum);
+		return out;
+	}
+
+	void* js2np_pointer(JsValueRef value) noexcept
+	{
+		JsValue ptrvalue = JsRawData(value);
+		VoidPointer* ptr = ptrvalue.getNativeObject<VoidPointer>();
+		if (ptr == nullptr) return nullptr;
+		return ptr->getAddressRaw();
+	}
+
+	JsValueRef np2js_pointer(void* ptr, JsValueRef ctor) noexcept
+	{
+		JsScope _scope;
+		JsValue ctorv = JsClass((JsRawData)ctor).newInstanceRaw({});
+		VoidPointer* nptr = ctorv.getNativeObject<VoidPointer>();
+		_assert(nptr != nullptr);
+		nptr->setAddressRaw(ptr);
+
+		return ctorv.getRaw();
+	}
+
+	JsValueRef js_pointer_new(JsValueRef ctor, JsValueRef* out) noexcept
+	{
+		JsValue ctorv = JsClass((JsRawData)ctor).newInstanceRaw({JsValue(true)});
+		*out = ctorv.getRaw();
+
+		VoidPointer* nptr = ctorv.getNativeObject<VoidPointer>();
+		return nptr->getAddressRaw();
+	}
+
+	int64_t bin64(JsValueRef value, uint32_t paramNum) noexcept
+	{
+		pcstr16 str;
+		size_t len;
+		JsErrorCode err = JsStringToPointer(value, (const wchar_t **)&str, &len);
+		if (err != JsNoError) getout_invalid_parameter(paramNum);
+		return getBin64(Text16(str, str+len));
+	}
+
+	void* js2np_wrapper(JsValueRef ptr, JsValueRef func) noexcept
+	{
+		JsScope _scope;
+		JsValue res = ((JsRawData)func).call(JsRuntime::global(), { (JsValue)(JsRawData)ptr });
+		VoidPointer* nptr = res.getNativeObject<VoidPointer>();
+		if (nptr == nullptr)
+		{
+			JsValueRef error = makeError(TSZ16() << u"Invalid [makefunc.js2np] return type, must return *Pointer type.");
+			getout_jserror(error);
+		}
+		return nptr->getAddressRaw();
+	}
+
+	JsValueRef np2js_wrapper(void* ptr, JsValueRef func) noexcept
+	{
+		JsScope _scope;
+		JsValue nptr = NativePointer::newInstanceRaw({});
+		nptr.getNativeObject<NativePointer>()->setAddressRaw(ptr);
+		return JsValue((JsRawData)func).call(nptr).getRaw();
+	}
+
+	struct FunctionTable
+	{
+		// void* p_getout = getout;
+		void* p_np2js_wrapper = np2js_wrapper;
+		void* p_js2np_wrapper = js2np_wrapper;
+		void* p_stack_alloc = stack_alloc;
+		void* p_stack_free_all = stack_free_all;
+		void* p_stack_ansi = stack_ansi;
+		void* p_stack_utf8 = stack_utf8;
+		void* p_js2np_utf16 = js2np_utf16;
+		void* p_js2np_pointer = js2np_pointer;
+		void* p_bin64 = bin64;
+		void* p_JsNumberToInt = JsNumberToInt;
+		void* p_JsBoolToBoolean = JsBoolToBoolean;
+		void* p_JsBooleanToBool = JsBooleanToBool;
+
+		void* p_getout_invalid_parameter = getout_invalid_parameter;
+
+		void* p_JsIntToNumber = JsIntToNumber;
+		void* p_JsNumberToDouble = JsNumberToDouble;
+		void* p_buffer_to_pointer = buffer_to_pointer;
+		void* p_JsDoubleToNumber = JsDoubleToNumber;
+		void* p_JsPointerToString = JsPointerToString;
+		void* p_np2js_ansi = np2js_ansi;
+		void* p_np2js_utf8 = np2js_utf8;
+		void* p_np2js_utf16 = np2js_utf16;
+		void* p_np2js_pointer = np2js_pointer;
+		void* p_getout_invalid_parameter_count = getout_invalid_parameter_count;
+		void* p_JsCallFunction = JsCallFunction;
+		void* p_js_pointer_new = js_pointer_new;
+	};
+
+	const FunctionTable functionTableDefine;
+
+	constexpr size_t centerOfFunctionTable = offsetof(FunctionTable, p_getout_invalid_parameter);
+
+	const qword functionTablePtr = (qword)((byte*)&functionTableDefine + centerOfFunctionTable);
+
+	Text16 getNameFromType(JsType type) noexcept
+	{
+		switch (type)
+		{
+		case JsType::Undefined: return u"undefined";
+		case JsType::Null: return u"null";
+		case JsType::Boolean: return u"boolean";
+		case JsType::Integer:
+		case JsType::Float: return u"number";
+		case JsType::String: return u"string";
+		case JsType::Function: return u"function";
+		case JsType::Object:
+		case JsType::ArrayBuffer:
+		case JsType::TypedArray:
+		case JsType::DataView:
+			return u"object";
+		default:
+			return u"[invalid]";
+		}
+	}
+
+	Text16 getNameFromRawType(RawTypeId type) noexcept
+	{
+		switch (type)
+		{
+		case RawTypeId::Int32: return u"RawTypeId.Int32";
+		case RawTypeId::FloatAsInt64: return u"RawTypeId.FloatAsInt64";
+		case RawTypeId::Float: return u"RawTypeId.Float";
+		case RawTypeId::StringAnsi: return u"RawTypeId.StringAnsi";
+		case RawTypeId::StringUtf8: return u"RawTypeId.StringUtf8";
+		case RawTypeId::StringUtf16: return u"RawTypeId.StringUtf16";
+		case RawTypeId::Buffer: return u"RawTypeId.Buffer";
+		case RawTypeId::Bin64: return u"RawTypeId.Bin64";
+		case RawTypeId::Boolean: return u"RawTypeId.Boolean";
+		case RawTypeId::JsValueRef: return u"RawTypeId.JsValueRef";
+		case RawTypeId::Void: return u"RawTypeId.Void";
+		default: return u"RawTypeId.[invalid]";
+		}
+	}
+
+	VoidPointer* pointerInstanceOrThrow(JsValue value, int32_t paramNumber) throws(JsException)
+	{
+		VoidPointer* ptr = value.getNativeObject<VoidPointer>();
+		if (ptr == nullptr)
+		{
+			TSZ16 tsz;
+			if (paramNumber == -1) tsz << u"Invalid return type";
+			else if (paramNumber == 0) tsz << u"Invalid this type";
+			else tsz << u"Invalid parameter type at " << (uint32_t)paramNumber;
+
+			tsz << u", *Pointer instance required";
+			throw JsException(tsz);
+		}
+		return ptr;
+	}
+
+	constexpr int32_t PARAMNUM_INVALID = -2;
+	constexpr int32_t PARAMNUM_RETURN = -1;
+	constexpr int32_t PARAMNUM_THIS = 0;
+
+	ATTR_NORETURN void throwTypeError(int32_t paramNum, Text16 name, Text16 value, Text16 detail) throws(JsException)
+	{
+		TSZ16 tsz;
+		if (paramNum == PARAMNUM_RETURN) tsz << u"Invalid return ";
+		else if (paramNum == PARAMNUM_THIS) tsz << u"Invalid this ";
+		else tsz << u"Invalid parameter ";
+		tsz << name << u'(' << value << u')';
+		if (paramNum > 0) tsz << u" at " << paramNum;
+		tsz << u", " << detail;
+		throw JsException(tsz);
+	}
+
+	ATTR_NORETURN void invalidParamType(RawTypeId type, int32_t paramNum) throws(JsException)
+	{
+		throwTypeError(paramNum, u"type", getNameFromRawType(type), u"Out of RawTypeId value");
+	}
+
+	void checkTypeIsFunction(JsValue value, int32_t paramNum) throws(JsException)
+	{
+		JsType jstype = value.getType();
+		if (jstype != JsType::Function)
+		{
+			throwTypeError(paramNum, u"type", getNameFromType(jstype), u"function required");
+		}
+	}
+
+	void pointerClassOrThrow(int32_t paramNum, JsValue type) throws(JsException)
+	{
+		if (!type.prototypeOf(VoidPointer::classObject))
+		{
+			JsValue name = type.get(u"name").toString();
+			throwTypeError(paramNum, u"class", name.as<Text16>(), u"*Pointer class required");
+		}
+	}
+
+	RawTypeId getRawTypeId(uint32_t paramNum, const JsValue& typeValue) throws(JsException)
+	{
+		JsType jstype = typeValue.getType();
+		switch (jstype)
+		{
+		case JsType::Function:
+			if (typeValue.get(s_field->js2np_prop).getType() != JsType::Function ||
+				typeValue.get(s_field->js2np_prop).getType() != JsType::Function)
+			{
+				// wrapper
+			}
+			else
+			{
+				pointerClassOrThrow(paramNum, typeValue);
+			}
+			return RawTypeId::PointerOrWrapper;
+		case JsType::Integer:
+			// fall through
+		case JsType::Float:
+			return (RawTypeId)typeValue.valueOf().as<int>();
+		case JsType::Object:
+			if (typeValue.get(s_field->js2np_prop).getType() != JsType::Function ||
+				typeValue.get(s_field->js2np_prop).getType() != JsType::Function)
+			{
+				return RawTypeId::PointerOrWrapper;
+			}
+			// fall through
+		default:
+			throwTypeError(paramNum, u"type", getNameFromType(jstype), u"RawTypeId or *Pointer class required");
+		}
+
+	}
+
+	static const Register _regMap[] = { RAX, RCX, RDX, R8, R9 };
+	static const FloatRegister _fregMap[] = { XMM0, XMM0, XMM1, XMM2, XMM3 };
+
+	static const Register* const regMap = _regMap + 1;
+	static const FloatRegister* const fregMap = _fregMap + 1;
+
+#define CALL(funcname) call(QwordPtr, RDI, (int32_t)offsetof(FunctionTable, p_##funcname)-(int32_t)centerOfFunctionTable);
+
+
+	struct ParamInfo
+	{
+		dword indexOnCpp;
+		dword numberOnMaking;
+		dword numberOnUsing;
+		JsValue type;
+		RawTypeId typeId;
+	};
+
+	class ParamInfoMaker
+	{
+	public:
+		const JsArguments& args;
+		int32_t structureReturn;
+		TmpArray<RawTypeId> typeIds;
+		dword countOnMaking;
+		dword countOnCalling;
+		dword countOnCpp;
+		dword paramOffset;
+		int32_t useThis;
+
+		ParamInfoMaker(const JsArguments& args, uint32_t paramOffset) throws(JsException)
+			:args(args), paramOffset(paramOffset)
+		{
+			countOnMaking = intact<uint32_t>(args.size());
+			if (countOnMaking < paramOffset) throw JsException(u"Too few parameters");
+			JsValue thisType = args[2].cast<JsValue>();
+			
+			if (paramOffset >= 4) structureReturn = args[3].cast<bool>() ? 1 : 0;
+			
+			useThis = (args[2] != nullptr) ? 1 : 0;
+			countOnCalling = countOnMaking - paramOffset;
+			countOnCpp = countOnCalling + useThis + structureReturn;
+
+			typeIds.reserve(countOnCpp);
+			if (structureReturn) typeIds.push(RawTypeId::StructureReturn);
+			if (useThis) typeIds.push(RawTypeId::PointerOrWrapper);
+			for (dword i = paramOffset; i < countOnMaking; i++)
+			{
+				RawTypeId type = getRawTypeId(i + 1, args[i]);
+				typeIds.push(type);
+			}
+		}
+
+		ParamInfo getInfo(uint32_t indexOnCpp) noexcept
+		{
+			ParamInfo info;
+			info.indexOnCpp = indexOnCpp;
+
+			if (indexOnCpp == -1)
+			{
+				info.type = args[1];
+				info.numberOnMaking = 2;
+				info.typeId = getRawTypeId(2, info.type);
+				info.numberOnUsing = PARAMNUM_RETURN;
+				return info;
+			}
+			else if (structureReturn && indexOnCpp == 0)
+			{
+				info.type = args[1];
+				info.numberOnMaking = 2;
+				info.typeId = RawTypeId::StructureReturn;
+				info.numberOnUsing = PARAMNUM_RETURN;
+				return info;
+			}
+			if (useThis && indexOnCpp == structureReturn)
+			{
+				info.type = args[2];
+				info.numberOnMaking = 3;
+				info.typeId = RawTypeId::PointerOrWrapper;
+				info.numberOnUsing = PARAMNUM_THIS;
+				return info;
+			}
+			uint32_t indexOnUsing = indexOnCpp - structureReturn;
+			if (useThis) indexOnUsing--;
+			uint32_t indexOnMaking = paramOffset + indexOnUsing;
+			info.type = args[indexOnMaking];
+			info.numberOnMaking = indexOnMaking + 1;
+			info.numberOnUsing = indexOnUsing + 1;
+			info.typeId = typeIds[indexOnCpp];
+			return info;
+		};
+	};
+
+
+	struct TargetInfo
+	{
+		Register reg;
+		FloatRegister freg;
+		int32_t offset;
+		bool memory;
+
+		bool operator ==(const TargetInfo& other) noexcept
+		{
+			if (memory)
+			{
+				return other.memory && reg == other.reg && offset == other.offset;
+			}
+			return !other.memory && reg == other.reg;
+		}
+		bool operator !=(const TargetInfo& other) noexcept
+		{
+			return !(*this == other);
+		}
+
+		TargetInfo() noexcept
+		{
+		}
+		TargetInfo(Register reg, FloatRegister freg) noexcept
+			:reg(reg), freg(freg)
+		{
+		}
+		TargetInfo(Register reg, int32_t offset) noexcept
+			:reg(reg), offset(offset)
+		{
+			memory = true;
+		}
+		TargetInfo(int32_t target, int32_t offset) noexcept
+		{
+			if (memory = ((uint32_t)target + 1 >= 5))
+			{
+				reg = RBP;
+			}
+			else
+			{
+				reg = regMap[target];
+				freg = fregMap[target];
+			}
+			this->offset = offset;
+		}
+
+		TargetInfo tempPtr() noexcept
+		{
+			if (memory) return *this;
+			return TargetInfo(RBP, 0);
+		}
+	};
+
+	const TargetInfo TARGET_RETURN = TargetInfo(RAX, XMM0);
+	const TargetInfo TARGET_1 = TargetInfo(RCX, XMM0);
+
+
+	class Maker :public JitFunction
+	{
+
+	public:
+		int32_t stackSize;
+
+		Maker(size_t size, int32_t stackSize) noexcept
+			:JitFunction(size), stackSize(stackSize)
+		{
+			mov(RAX, (qword)&returnPoint);
+			mov(R10, QwordPtr, RAX);
+
+			push(RDI);
+			push(RSI);
+			push(RBP);
+			push(R10);
+
+			mov(QwordPtr, RAX, RSP);
+			mov(RDI, functionTablePtr);
+		}
+
+		~Maker() noexcept
+		{
+			add(RSP, stackSize+0x8); // pop(RDX)
+			pop(RBP);
+			pop(RSI);
+			pop(RDI);
+			ret();
+		}
+
+		bool useStackAllocator = false;
+
+
+		void _mov(TargetInfo target, uint64_t value) noexcept {
+			
+			if (target.memory)
+			{
+				mov(RAX, value);
+				mov(QwordPtr, target.reg, target.offset, RAX);
+			}
+			else
+			{
+				mov(target.reg, value);
+			}
+		}
+
+		void _mov(TargetInfo target, TargetInfo source, RawTypeId type, bool reverse) noexcept {
+			if (target.memory)
+			{
+				if (source.memory)
+				{
+					if (type == RawTypeId::FloatAsInt64)
+					{
+						if (reverse)
+						{
+							cvttsi2sd(XMM0, QwordPtr, source.reg, source.offset);
+							movsd(QwordPtr, target.reg, target.offset, XMM0);
+						}
+						else
+						{
+							cvttsd2si(RAX, QwordPtr, source.reg, source.offset);
+							mov(QwordPtr, target.reg, target.offset, RAX);
+						}
+					}
+					else if (type == RawTypeId::Boolean)
+					{
+						if (target == source)
+						{
+							// same
+						}
+						else
+						{
+							movzx(RAX, BytePtr, source.reg, source.offset);
+							mov(BytePtr, target.reg, target.offset, AL);
+						}
+					}
+					else if (type == RawTypeId::Int32)
+					{
+						if (target == source)
+						{
+							// same
+						}
+						else
+						{
+							movsxd(RAX, DwordPtr, source.reg, source.offset);
+							mov(QwordPtr, target.reg, target.offset, RAX);
+						}
+					}
+					else
+					{
+						if (target == source)
+						{
+							// same
+						}
+						else
+						{
+							mov(RAX, QwordPtr, source.reg, source.offset);
+							mov(QwordPtr, target.reg, target.offset, RAX);
+						}
+					}
+				}
+				else
+				{
+					if (type == RawTypeId::FloatAsInt64)
+					{
+						if (reverse)
+						{
+							cvttsi2sd(XMM0, source.reg);
+							movsd(QwordPtr, target.reg, target.offset, XMM0);
+						}
+						else
+						{
+							cvttsd2si(RAX, source.freg);
+							mov(QwordPtr, target.reg, target.offset, RAX);
+						}
+					}
+					else if (type == RawTypeId::Float)
+					{
+						movsd(QwordPtr, target.reg, target.offset, source.freg);
+					}
+					else if (type == RawTypeId::Boolean)
+					{
+						mov(BytePtr, target.reg, target.offset, (RegisterLow)source.reg);
+					}
+					else
+					{
+						mov(QwordPtr, target.reg, target.offset, source.reg);
+					}
+				}
+			}
+			else
+			{
+				if (source.memory)
+				{
+					if (type == RawTypeId::FloatAsInt64)
+					{
+						if (reverse)
+						{
+							cvttsi2sd(target.freg, QwordPtr, source.reg, source.offset);
+						}
+						else
+						{
+							cvttsd2si(target.reg, QwordPtr, source.reg, source.offset);
+						}
+					}
+					else if (type == RawTypeId::Float)
+					{
+						movsd(target.freg, QwordPtr, source.reg, source.offset);
+					}
+					else if (type == RawTypeId::Boolean)
+					{
+						movzx(target.reg, BytePtr, source.reg, source.offset);
+					}
+					else if (type == RawTypeId::Int32)
+					{
+						movsxd(target.reg, DwordPtr, source.reg, source.offset);
+					}
+					else
+					{
+						mov(target.reg, QwordPtr, source.reg, source.offset);
+					}
+				}
+				else
+				{
+					if (type == RawTypeId::FloatAsInt64)
+					{
+						if (reverse)
+						{
+							cvttsi2sd(target.freg, source.reg);
+						}
+						else
+						{
+							cvttsd2si(target.reg, source.freg);
+						}
+					}
+					else
+					{
+						if (target != source)
+						{
+							if (type == RawTypeId::Float)
+							{
+								movsd(target.freg, source.freg);
+							}
+							else
+							{
+								mov(target.reg, source.reg);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		void nativeToJs(const ParamInfo &info, TargetInfo target, TargetInfo source) throws(JsException)
+		{
+			switch (info.typeId)
+			{
+			case RawTypeId::StructureReturn: {
+				_mov(target, TARGET_RETURN, RawTypeId::Void, true);
+				break;
+			}
+			case RawTypeId::PointerOrWrapper: {
+				JsValue np2js = info.type.get(s_field->np2js_prop);
+				if (np2js.getType() != JsType::Function)
+				{
+					pointerClassOrThrow(info.numberOnMaking, info.type);
+
+					JsValueRef rawvalue = info.type.getRaw();
+					JsAddRef(rawvalue, nullptr);
+
+					_mov(TARGET_1, source, RawTypeId::Void, true);
+					mov(RDX, (qword)rawvalue);
+					CALL(np2js_pointer);
+				}
+				else
+				{
+					JsValueRef np2jsraw = np2js.getRaw();
+					JsAddRef(np2jsraw, nullptr);
+
+					_mov(TARGET_1, source, RawTypeId::Void, true);
+					mov(RDX, (qword)np2jsraw);
+					CALL(np2js_wrapper);
+				}
+				_mov(target, TARGET_RETURN, RawTypeId::Void, true);
+				break;
+			}
+			case RawTypeId::Boolean: {
+				TargetInfo temp = target.tempPtr();
+				_mov(TARGET_1, source, info.typeId, true);
+				lea(RDX, temp.reg, temp.offset);
+				CALL(JsBoolToBoolean);
+				test(RAX, RAX);
+				jz(9);
+				mov(RCX, info.numberOnUsing);
+				CALL(getout_invalid_parameter);
+				_mov(target, temp, RawTypeId::Void, true);
+				break;
+			}
+			case RawTypeId::Int32: {
+				TargetInfo temp = target.tempPtr();
+				_mov(TARGET_1, source, info.typeId, true);
+				lea(RDX, temp.reg, temp.offset);
+				CALL(JsIntToNumber);
+				test(RAX, RAX);
+				jz(9);
+				mov(RCX, info.numberOnUsing);
+				CALL(getout_invalid_parameter);
+				_mov(target, temp, RawTypeId::Void, true);
+				break;
+			}
+			case RawTypeId::FloatAsInt64: {
+				TargetInfo temp = target.tempPtr();
+				_mov(TARGET_1, source, info.typeId, true);
+				lea(RDX, temp.reg, temp.offset);
+				CALL(JsDoubleToNumber);
+				test(RAX, RAX);
+				jz(9);
+				mov(RCX, info.numberOnUsing);
+				CALL(getout_invalid_parameter);
+				_mov(target, temp, RawTypeId::Void, true);
+				break;
+			}
+			case RawTypeId::Float: {
+				TargetInfo temp = target.tempPtr();
+				_mov(TARGET_1, source, info.typeId, true);
+				lea(RDX, temp.reg, temp.offset);
+				CALL(JsDoubleToNumber);
+				test(RAX, RAX);
+				jz(9);
+				mov(RCX, info.numberOnUsing);
+				CALL(getout_invalid_parameter);
+				_mov(target, temp, RawTypeId::Void, true);
+				break;
+			}
+			case RawTypeId::StringAnsi:
+				_mov(TARGET_1, source, info.typeId, true);
+				mov(RDX, info.numberOnUsing);
+				CALL(np2js_ansi);
+				_mov(target, TARGET_RETURN, RawTypeId::Void, true);
+				break;
+			case RawTypeId::StringUtf8:
+				_mov(TARGET_1, source, info.typeId, true);
+				mov(RDX, info.numberOnUsing);
+				CALL(np2js_utf8);
+				_mov(target, TARGET_RETURN, RawTypeId::Void, true);
+				break;
+			case RawTypeId::StringUtf16:
+				_mov(TARGET_1, source, info.typeId, true);
+				mov(RDX, info.numberOnUsing);
+				CALL(np2js_utf16);
+				_mov(target, TARGET_RETURN, RawTypeId::Void, true);
+				break;
+			case RawTypeId::Bin64: {
+				TargetInfo temp = target.tempPtr();
+				_mov(temp, source, info.typeId, true);
+				mov(RCX, RBP);
+				mov(RDX, (dword)4);
+				lea(R8, temp.reg, temp.offset);
+				CALL(JsPointerToString);
+				test(RAX, RAX);
+				jz(9);
+				mov(RCX, info.numberOnUsing);
+				CALL(getout_invalid_parameter);
+				_mov(target, temp, RawTypeId::Void, true);
+				break;
+			}
+			case RawTypeId::JsValueRef:
+				_mov(target, source, info.typeId, true);
+				break;
+			case RawTypeId::Void:
+				_mov(target, (uint64_t)(JsValue(undefined).getRaw()));
+				break;
+			default:
+				invalidParamType(info.typeId, info.numberOnUsing);
+			}
+		}
+
+		void jsToNative(const ParamInfo& info, TargetInfo target, TargetInfo source) throws(JsException)
+		{
+			switch (info.typeId)
+			{
+			case RawTypeId::StructureReturn: {
+				mov(RCX, (qword)info.type.getRaw());
+				mov(RDX, RAX);
+				CALL(js_pointer_new);
+				_mov(target, TARGET_RETURN, RawTypeId::Void, true);
+				break;
+			}
+			case RawTypeId::PointerOrWrapper: {
+				JsValue js2np = info.type.get(s_field->js2np_prop);
+				if (js2np.getType() != JsType::Function)
+				{
+					pointerClassOrThrow(info.numberOnMaking, info.type);
+					_mov(TARGET_1, source, RawTypeId::Void, false);
+					CALL(js2np_pointer);
+				}
+				else
+				{
+					JsValueRef js2npraw = js2np.getRaw();
+					JsAddRef(js2npraw, nullptr);
+
+					_mov(TARGET_1, source, RawTypeId::Void, true);
+					mov(RDX, (qword)js2npraw);
+					CALL(js2np_wrapper);
+				}
+				_mov(target, TARGET_RETURN, RawTypeId::Void, false);
+				break;
+			}
+			case RawTypeId::Boolean: {
+				TargetInfo temp = target.tempPtr();
+				_mov(TARGET_1, source, RawTypeId::Void, false);
+				lea(RDX, temp.reg, temp.offset);
+				CALL(JsBooleanToBool);
+				test(RAX, RAX);
+				jz(9);
+				mov(RCX, info.numberOnUsing);
+				CALL(getout_invalid_parameter);
+				_mov(target, temp, info.typeId, false);
+				break;
+			}
+			case RawTypeId::Int32: {
+				TargetInfo temp = target.tempPtr();
+				_mov(TARGET_1, source, RawTypeId::Void, false);
+				lea(RDX, temp.reg, temp.offset);
+				CALL(JsNumberToInt);
+				test(RAX, RAX);
+				jz(9);
+				mov(RCX, info.numberOnUsing);
+				CALL(getout_invalid_parameter);
+				_mov(target, temp, info.typeId, false);
+				break;
+			}
+			case RawTypeId::FloatAsInt64: {
+				TargetInfo temp = target.tempPtr();
+				_mov(TARGET_1, source, RawTypeId::Void, false);
+				lea(RDX, temp.reg, temp.offset);
+				CALL(JsNumberToDouble);
+				test(RAX, RAX);
+				jz(9);
+				mov(RCX, info.numberOnUsing);
+				CALL(getout_invalid_parameter);
+				_mov(target, temp, info.typeId, false);
+				break;
+			}
+			case RawTypeId::Float: {
+				TargetInfo temp = target.tempPtr();
+				_mov(TARGET_1, source, RawTypeId::Void, false);
+				lea(RDX, temp.reg, temp.offset);
+				CALL(JsNumberToDouble);
+				test(RAX, RAX);
+				jz(9);
+				mov(RCX, info.numberOnUsing);
+				CALL(getout_invalid_parameter);
+				_mov(target, temp, info.typeId, false);
+				break;
+			}
+			case RawTypeId::StringAnsi:
+				_mov(TARGET_1, source, RawTypeId::Void, false);
+				mov(RDX, info.numberOnUsing);
+				CALL(stack_ansi);
+				_mov(target, TARGET_RETURN, info.typeId, false);
+				useStackAllocator = true;
+				break;
+			case RawTypeId::StringUtf8:
+				_mov(TARGET_1, source, RawTypeId::Void, false);
+				mov(RDX, info.numberOnUsing);
+				CALL(stack_utf8);
+				_mov(target, TARGET_RETURN, info.typeId, false);
+				useStackAllocator = true;
+				break;
+			case RawTypeId::StringUtf16:
+				_mov(TARGET_1, source, RawTypeId::Void, false);
+				mov(RDX, info.numberOnUsing);
+				CALL(js2np_utf16);
+				_mov(target, TARGET_RETURN, info.typeId, false);
+				break;
+			case RawTypeId::Buffer:
+				_mov(TARGET_1, source, RawTypeId::Void, false);
+				mov(RDX, info.numberOnUsing);
+				CALL(buffer_to_pointer);
+				_mov(target, TARGET_RETURN, info.typeId, false);
+				break;
+			case RawTypeId::Bin64:
+				_mov(TARGET_1, source, RawTypeId::Void, false);
+				mov(RCX, QwordPtr, RSI);
+				mov(RDX, info.numberOnUsing);
+				CALL(bin64);
+				_mov(target, TARGET_RETURN, info.typeId, false);
+				break;
+			case RawTypeId::JsValueRef:
+				_mov(target, source, info.typeId, false);
+				break;
+			case RawTypeId::Void:
+				if (target == TARGET_RETURN) break;
+			default:
+				invalidParamType(info.typeId, info.numberOnMaking);
+			}
+		}
+	};
+
+#undef CALL
+#define CALL(funcname) func.call(QwordPtr, RDI, (int32_t)offsetof(FunctionTable, p_##funcname)-(int32_t)centerOfFunctionTable);
+#define JUMP(funcname) func.jump(QwordPtr, RDI, (int32_t)offsetof(FunctionTable, p_##funcname)-(int32_t)centerOfFunctionTable);
+
+}
+
+JsValue functionFromNative(const JsArguments& args) throws(JsException, JsValue)
+{
+	VoidPointer* nativeptr = pointerInstanceOrThrow(args[0], 1);
+	ParamInfoMaker pimaker(args, 4);
+
+	// JsValueRef( * JsNativeFunction)(JsValueRef callee, bool isConstructCall, JsValueRef *arguments, unsigned short argumentCount, void *callbackState);
+
+	int paramsSize = pimaker.countOnCpp * 8;
+	int stackSize = paramsSize;
+	if (pimaker.structureReturn) stackSize += 0x8; // structureReturn space
+	stackSize += 0x8; // temp space space
+	if (stackSize < 0x20) stackSize = 0x20; // minimal
+
+	// alignment
+	constexpr int alignmentOffset = 8;
+	stackSize -= alignmentOffset;
+	stackSize = ((stackSize + 0xf) & ~0xf);
+	stackSize += alignmentOffset;
+
+	Maker func(512, stackSize);
+	if (pimaker.countOnCalling != 0)
+	{
+		func.cmp(R9, (int)(pimaker.countOnCalling + 1));
+		func.jz(14);
+		func.mov(RDX, pimaker.countOnCalling); // 7 bytes
+		func.lea(RCX, R9, -1); // 4 bytes
+		JUMP(getout_invalid_parameter_count); // 3 bytes
+	}
+	func.mov(RSI, R8);
+
+	if (pimaker.structureReturn) func.lea(RAX, RSP, -8);
+	func.lea(RBP, RSP, paramsSize - func.stackSize);
+
+	if (pimaker.countOnCpp > 1)
+	{
+		constexpr int32_t stackSizeForConvert = 0x20;
+		func.sub(RSP, func.stackSize + stackSizeForConvert);
+
+		uint32_t last = pimaker.countOnCpp - 1;
+		int32_t offset = - paramsSize;
+		for (dword i = 0; i < pimaker.countOnCpp; i++)
+		{
+			ParamInfo info = pimaker.getInfo(i);
+			func.jsToNative(info, 
+				i != last ? TargetInfo(RBP, offset) : TargetInfo(i, offset), 
+				TargetInfo(RSI, info.numberOnUsing * 8));
+			offset += 8;
+		}
+
+		if (func.useStackAllocator)
+		{
+			func.mov(RAX, (qword)&last_allocate);
+			func.or_(QwordPtr, RAX, 0, 1);
+		}
+
+		func.add(RSP, stackSizeForConvert);
+
+		// paramCountOnCpp >= 2
+		if (pimaker.typeIds[0] == RawTypeId::Float)
+		{
+			func.movsd(XMM0, QwordPtr, RSP, 0);
+		}
+		else
+		{
+			func.mov(RCX, QwordPtr, RSP, 0);
+		}
+		if (pimaker.countOnCpp >= 3)
+		{
+			if (pimaker.typeIds[1] == RawTypeId::Float)
+			{
+				func.movsd(XMM1, QwordPtr, RSP, 8);
+			}
+			else
+			{
+				func.mov(RDX, QwordPtr, RSP, 8);
+			}
+			if (pimaker.countOnCpp >= 4)
+			{
+				if (pimaker.typeIds[2] == RawTypeId::Float)
+				{
+					func.movsd(XMM2, QwordPtr, RSP, 16);
+				}
+				else
+				{
+					func.mov(R8, QwordPtr, RSP, 16);
+				}
+				if (pimaker.countOnCpp >= 5)
+				{
+					if (pimaker.typeIds[3] == RawTypeId::Float)
+					{
+						func.movsd(XMM3, QwordPtr, RSP, 24);
+					}
+					else
+					{
+						func.mov(R9, QwordPtr, RSP, 24);
+					}
+				}
+			}
+		}
+	}
+	else
+	{
+		func.sub(RSP, func.stackSize);
+
+		if (pimaker.countOnCpp != 0)
+		{
+			ParamInfo pi = pimaker.getInfo(0);
+			func.jsToNative(pi, TARGET_1, TargetInfo(RSI, pi.numberOnUsing * 8));
+		}
+
+		if (func.useStackAllocator)
+		{
+			func.mov(RAX, (qword)&last_allocate);
+			func.or_(QwordPtr, RAX, 0, 1);
+		}
+	}
+
+	func.call(nativeptr->getAddressRaw(), RAX);
+
+	JsValue retType = args[1];
+	RawTypeId retTypeCode = getRawTypeId(PARAMNUM_RETURN, retType);
+	if (func.useStackAllocator)
+	{
+		if (retTypeCode != RawTypeId::Float)
+		{
+			func.mov(QwordPtr, RBP, RAX);
+		}
+		else
+		{
+			func.movsd(QwordPtr, RBP, 0, XMM0);
+		}
+		func.mov(RDX, (qword)&last_allocate);
+		func.xor_(QwordPtr, RDX, 0, 1);
+		CALL(stack_free_all);
+	}
+
+	if (pimaker.structureReturn)
+	{
+		func.mov(RAX, QwordPtr, RBP, -paramsSize + func.stackSize - 8);
+	}
+	else
+	{
+		func.nativeToJs(pimaker.getInfo(-1), TARGET_RETURN, func.useStackAllocator ? TargetInfo(RBP, 0) : TARGET_RETURN);
+	}
+	void* funcptr = func.pointer();
+	JsValueRef funcref;
+	JsErrorCode err = JsCreateFunction((JsNativeFunction)funcptr, nullptr, &funcref);
+	if (err != JsNoError) _throwJsrtError(err);
+	JsValue funcout = (JsRawData)funcref;
+	funcout.set(s_field->pointer, nativeptr);
+	return funcout;
+}
+JsValue functionToNative(const JsArguments& args) throws(JsException, JsValue)
+{
+	ParamInfoMaker pimaker(args, 3);
+
+	JsValue jsfunc = args[0];
+	JsAddRef(jsfunc.getRaw(), nullptr);
+	checkTypeIsFunction(jsfunc, 1);
+
+	int paramsSize = pimaker.countOnCalling * 8 + 8; // params + this
+	int stackSize = paramsSize;
+	stackSize += 0x8; // temp space
+	stackSize += 0x20; // calling space (use stack through ending)
+	if (stackSize < 0x20) stackSize = 0x20; // minimal
+
+	// alignment
+	constexpr int alignmentOffset = 8;
+	stackSize -= alignmentOffset;
+	stackSize = ((stackSize + 0xf) & ~0xf);
+	stackSize += alignmentOffset;
+
+	Maker func(512, stackSize);
+
+	// 0x20~0x28 - return address
+	// 0x00~0x20 - pushed data
+	func.lea(RBP, RSP, 0x28);
+
+	uint32_t activeRegisters = mint(pimaker.countOnCpp, 4U);
+	if (activeRegisters > 1)
+	{
+		for (int i = 1; i < (int)activeRegisters; i++)
+		{
+			int offset = i * 8;
+			if (pimaker.typeIds[i] == RawTypeId::Float)
+			{
+				FloatRegister freg = fregMap[i];
+				func.movsd(QwordPtr, RBP, offset, freg);
+			}
+			else
+			{
+				Register reg = regMap[i];
+				func.mov(QwordPtr, RBP, offset, reg);
+			}
+		}
+	}
+
+	func.lea(RSI, RSP, -func.stackSize+0x20); // without calling stack
+	func.sub(RSP, func.stackSize);
+
+	int offset = 0;
+	if (!pimaker.useThis)
+	{
+		JsValueRef global = JsRuntime::global().getRaw();
+		func._mov(TargetInfo(RSI, 0), (uint64_t)global);
+	}
+
+	uint32_t last = pimaker.countOnCpp - 1;
+	for (uint32_t i = 0; i < pimaker.countOnCpp; i++)
+	{
+		ParamInfo info = pimaker.getInfo(i);
+		if (i == 0)
+		{
+			func.nativeToJs(info, TargetInfo(RSI, info.numberOnUsing * 8), TARGET_1);
+		}
+		else
+		{
+			func.nativeToJs(info, TargetInfo(RSI, info.numberOnUsing * 8), TargetInfo(RBP, offset));
+		}
+		offset += 8;
+	}
+
+	func.mov(RCX, (qword)jsfunc.getRaw());
+	func.lea(RDX, RSP, 0x20);
+	func.mov(R8, pimaker.countOnCalling+1);
+	func.mov(R9, RBP);
+
+	CALL(JsCallFunction);
+
+	func.jsToNative(pimaker.getInfo(-1), TARGET_RETURN, TARGET_RETURN);
+
+	JsValue resultptr = VoidPointer::newInstanceRaw({});
+	resultptr.getNativeObject<VoidPointer>()->setAddressRaw(func.pointer());
+	return resultptr;
+}
+
+namespace
+{
+	namespace NativeCaller
+	{
+		static intptr_t getParameterValue(const JsValue& value, StackGC* gc) throws(JsException)
+		{
+			JsType type = value.getType();
+			switch (type)
+			{
+			case JsType::Undefined: return 0;
+			case JsType::Null: return 0;
+			case JsType::Boolean: return value.as<bool>() ? 1 : 0;
+			case JsType::Integer: return value.as<int>();
+			case JsType::Float:
+			{
+				int res = value.as<int>();
+				if ((double)value.as<int>() != value.as<double>())
+				{
+					throw JsException(u"non-supported type: float number");
+				}
+				return res;
+			}
+			case JsType::String:
+			{
+				return (intptr_t)value.as<Text16>().data();
+			}
+			case JsType::Function:
+				throw JsException(u"non-supported type: function");
+			case JsType::Object:
+			{
+				VoidPointer* ptr = value.getNativeObject<VoidPointer>();
+				if (ptr) return (intptr_t)ptr->getAddressRaw();
+				throw JsException(TSZ16() << u"non-supported type: object, " << JsValue(value.toString()).cast<Text16>());
+			}
+			case JsType::ArrayBuffer:
+			case JsType::TypedArray:
+			case JsType::DataView:
+				return (intptr_t)value.getBuffer().data();
+			default:
+				throw JsException(TSZ16() << u"unknown javascript type: " << (int)type);
+			}
+		}
+
+		template <size_t ... idx>
+		struct Expander
+		{
+			template <size_t idx>
+			using param = intptr_t;
+
+			static intptr_t call(void* fn, const JsArguments& args) throws(JsException)
+			{
+				StackGC gc;
+				return ((intptr_t(*)(param<idx>...))fn)(getParameterValue(args[idx], &gc) ...);
+			}
+		};
+
+		template <size_t size>
+		struct Call
+		{
+			static NativePointer* call(void* fn, const JsArguments& args) throws(...)
+			{
+				if (args.size() != size) return Call<size - 1>::call(fn, args);
+				using caller = typename meta::make_numlist_counter<size>::template expand<Expander>;
+				NativePointer* ptr = NativePointer::newInstance();
+				intptr_t ret = caller::call(fn, args);
+				ptr->setAddressRaw((void*)ret);
+
+				return ptr;
+			}
+		};
+
+		template <>
+		struct Call<(size_t)-1>
+		{
+			static NativePointer* call(void* fn, const JsArguments& args) throws(...)
+			{
+				unreachable();
+			}
+		};
+
+		template <size_t size>
+		static NativePointer* call(void* fn, const JsArguments& args) throws(JsException)
+		{
+			return Call<size>::call(fn, args);
+		}
+
+		JsValue makefunc(void* fn) noexcept
+		{
+			JsValue func = JsFunction::make([fn](const kr::JsArguments& arguments) {
+				JsAssert(arguments.size(), arguments.size() <= 16);
+				return NativeCaller::call<16>(fn, arguments);
+				});
+			NativePointer* addr = NativePointer::newInstance();
+			addr->setAddressRaw(fn);
+			func.set(s_field->pointer, addr);
+			return func;
+		}
+	}
+};
+
+JsValue functionFromNativeOld(StaticPointer* pointer) throws(JsException)
+{
+	if (pointer == nullptr) throw JsException(u"argument must be *Pointer");
+	return NativeCaller::makefunc(pointer->getAddressRaw());
+}
+
+kr::JsValue getMakeFuncNamespace() noexcept
+{
+	JsValue makefunc = JsNewObject;
+	makefunc.setMethodRaw(u"np", functionToNative);
+	makefunc.setMethodRaw(u"js", functionFromNative);
+	makefunc.setMethod(u"js_old", functionFromNativeOld);
+	makefunc.set(u"js2np", s_field->js2np);
+	makefunc.set(u"np2js", s_field->np2js);
+	return makefunc;
+}

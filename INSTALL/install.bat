@@ -7,16 +7,14 @@ if "%config%" == "Debug" (
 	set d=d
 )
 
-call :copydll "%UserProfile%\.bds\mods"
+call :copydll "%solutiondir%bdsx-node"
 goto :eof
 
 :copydll
-copy "%outdir%bdsx.dll" "%~1\bdsx.dll"
-copy "%outdir%bdsx.pdb" "%~1\bdsx.pdb"
-copy "%outdir%libcurl%_debug%.dll" "%~1\libcurl%_debug%.dll"
-copy "%outdir%libmariadb.dll" "%~1\libmariadb.dll"
-copy "%outdir%zlib%d%.dll" "%~1\zlib%d%.dll"
-copy "%outdir%bdsx_node.dll" "%~1\bdsx_node.dll"
-copy "%solutiondir%INSTALL\vcruntime140_1.dll" "%~1\vcruntime140_1.dll"
+if not exist "%~1" mkdir "%~1"
+copy "%outdir%Chakra.dll" "%~1\bedrock_server\Chakra.dll"
+copy "%outdir%ChakraCore.dll" "%~1\bedrock_server\ChakraCore.dll"
+copy "%outdir%bdsx.dll" "%~1\mods\bdsx.dll"
+copy "%outdir%bdsx.pdb" "%~1\mods\bdsx.pdb"
+copy "%solutiondir%INSTALL\vcruntime140_1.dll" "%~1\mods\vcruntime140_1.dll"
 EXIT /B 0
-

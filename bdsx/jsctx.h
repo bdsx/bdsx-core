@@ -1,14 +1,21 @@
 #pragma once
 
-#include <KR3/js/js.h>
+class MainContext: public kr::JsContext
+{
+public:
+	MainContext() noexcept;
+	~MainContext() noexcept;
 
-void createJsContext(kr::JsRawContext newContext) noexcept;
-void destroyJsContext() noexcept;
-bool isContextExisted() noexcept;
-void checkCurrentThread() noexcept;
-bool isContextThread() noexcept;
-uint32_t getContextThreadId() noexcept;
+	void log(kr::Text16 tx) noexcept;
+	void error(kr::Text16 tx) noexcept;
+	void error(const kr::JsException &err) noexcept;
+	void _tickCallback() noexcept;
 
-extern kr::Manual<kr::JsContext> g_ctx;
+private:
+	kr::JsPersistent m_tickCallback;
+	kr::JsPersistent m_console_log;
+	kr::JsPersistent m_console_error;
 
+};
 
+extern kr::Manual<MainContext> g_ctx;

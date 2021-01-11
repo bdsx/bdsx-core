@@ -5,20 +5,18 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommand>$(UserProfile)\.bds\bedrock_server.exe</LocalDebuggerCommand>
-    <LocalDebuggerCommandArguments>$(SolutionDir)bdsx-example</LocalDebuggerCommandArguments>
-    <LocalDebuggerWorkingDirectory>$(UserProfile)\.bds</LocalDebuggerWorkingDirectory>
+    <LocalDebuggerCommand>$(SolutionDir)bdsx-node\bedrock_server\bedrock_server.exe</LocalDebuggerCommand>
+    <LocalDebuggerCommandArguments>$(SolutionDir)bdsx-node</LocalDebuggerCommandArguments>
+    <LocalDebuggerWorkingDirectory>$(SolutionDir)bdsx-node</LocalDebuggerWorkingDirectory>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LocalDebuggerCommand>$(UserProfile)\.bds\bedrock_server.exe</LocalDebuggerCommand>
+    <LocalDebuggerCommand>$(SolutionDir)bdsx-node\bedrock_server\bedrock_server.exe</LocalDebuggerCommand>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>$(SolutionDir)bdsx-example</LocalDebuggerCommandArguments>
-    <LocalDebuggerWorkingDirectory>$(UserProfile)\.bds</LocalDebuggerWorkingDirectory>
+    <LocalDebuggerCommandArguments>$(SolutionDir)bdsx-node</LocalDebuggerCommandArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">
-    <LocalDebuggerCommand>$(UserProfile)\.bds\bedrock_server.exe</LocalDebuggerCommand>
+    <LocalDebuggerCommand>$(SolutionDir)bdsx-node\bedrock_server\bedrock_server.exe</LocalDebuggerCommand>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>$(SolutionDir)bdsx-example</LocalDebuggerCommandArguments>
-    <LocalDebuggerWorkingDirectory>$(UserProfile)\.bds</LocalDebuggerWorkingDirectory>
+    <LocalDebuggerCommandArguments>$(SolutionDir)bdsx-node</LocalDebuggerCommandArguments>
   </PropertyGroup>
 </Project>
