@@ -5,8 +5,26 @@
 #include "encoding.h"
 
 #include <KR3/util/unaligned.h>
+#include <KR3/win/handle.h>
 
 using namespace kr;
+
+struct Ucrtbase
+{
+	void*(*malloc)(size_t size);
+	void(*free)(void* ptr);
+
+	Ucrtbase() noexcept
+	{
+		HMODULE dll = GetModuleHandleW(L"ucrtbase.dll");
+		malloc = (autoptr)GetProcAddress(dll, "malloc");
+		free = (autoptr)GetProcAddress(dll, "free");
+	}
+};
+namespace
+{
+	Ucrtbase ucrtbase;
+}
 
 struct String
 {
@@ -27,11 +45,11 @@ struct String
 	{
 		size_t nsize = text.size();
 		char* dest;
-		if (nsize >= capacity)
+		if (nsize > capacity)
 		{
-			if (capacity >= 0x10) free(pointer);
+			if (capacity >= 0x10) ucrtbase.free(pointer);
 			capacity = nsize;
-			dest = pointer = (char*)malloc(nsize + 1);
+			dest = pointer = (char*)ucrtbase.malloc(nsize + 1);
 			if (dest == nullptr)
 			{
 				memcpy(buffer, "[out of memory]", 16);

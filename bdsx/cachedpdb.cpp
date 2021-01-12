@@ -449,7 +449,7 @@ void CachedPdb::search(JsValue masks, JsValue cb, bool quiet) throws(kr::JsExcep
 		throwAsJsException(err);
 	}
 }
-JsValue CachedPdb::getAll(bool quiet) throws(kr::JsException)
+JsValue CachedPdb::getAll(bool quiet, int total) throws(kr::JsException)
 {
 	try
 	{
@@ -460,20 +460,38 @@ JsValue CachedPdb::getAll(bool quiet) throws(kr::JsException)
 		struct Local
 		{
 			JsValue out = JsNewObject;
-			timepoint now = timepoint::now();
-			size_t totalcount = 0;
+			timepoint now;
+			size_t totalcount;
 			bool quiet;
-		} local;
-		local.quiet = quiet;
+			int total;
 
-		reader.getAll([&local](Text name, autoptr address) {
-			++local.totalcount;
-
-			timepoint newnow = timepoint::now();
-			if (newnow - local.now > 200_ms)
+			void report() noexcept
 			{
-				local.now = newnow;
-				if (!local.quiet) g_ctx->log(TSZ16() << u"[BDSX] PdbReader: Get symbols (" << local.totalcount << u")");
+				TSZ16 tsz;
+				tsz << u"[BDSX] PdbReader: Get symbols (" << totalcount;
+				if (total != 0) tsz << u'/' << total;
+				tsz << u')';
+				g_ctx->log(tsz);
+			}
+		} local;
+		if (!quiet)
+		{
+			local.totalcount = 0;
+			local.now = timepoint::now();
+			local.quiet = quiet;
+			local.total = total;
+			local.report();
+		}
+		reader.getAll([&local](Text name, autoptr address) {
+			if (!local.quiet)
+			{
+				++local.totalcount;
+				timepoint newnow = timepoint::now();
+				if (newnow - local.now > 1000_ms)
+				{
+					local.now = newnow;
+					local.report();
+				}
 			}
 
 			NativePointer* ptr = NativePointer::newInstance();
@@ -482,7 +500,11 @@ JsValue CachedPdb::getAll(bool quiet) throws(kr::JsException)
 			return true;
 			});
 
-		if (!quiet) g_ctx->log(u"[BDSX] PdbReader: done");
+		if (!quiet)
+		{
+			local.report();
+			g_ctx->log(TSZ16() << u"[BDSX] PdbReader: done (" << local.totalcount << u")");
+		}
 		return local.out;
 	}
 	catch (FunctionError& err)
@@ -499,6 +521,6 @@ JsValue getPdbNamespace() noexcept
 	pdb.setMethod(u"getOptions", []() { return g_pdb.getOptions(); });
 	pdb.setMethod(u"search", [](JsValue masks, JsValue cb, bool quiet) { return g_pdb.search(masks, cb, quiet); });
 	pdb.setMethod(u"getProcAddresses", [](JsValue out, JsValue array, bool quiet) { return g_pdb.getProcAddresses(out, array, quiet); });
-	pdb.setMethod(u"getAll", [](bool quiet) { return g_pdb.getAll(quiet); });
+	pdb.setMethod(u"getAll", [](bool quiet, int total) { return g_pdb.getAll(quiet, total); });
 	return pdb;
 }

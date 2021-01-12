@@ -7,6 +7,7 @@
 #include <KR3/win/windows.h>
 #include <KR3/mt/criticalsection.h>
 #include <KR3/util/StackWalker.h>
+#include <KR3/util/pdb.h>
 
 using namespace kr;
 
@@ -57,6 +58,7 @@ namespace
 
 	AText16 getStack(EXCEPTION_POINTERS* exptr) noexcept
 	{
+		PdbReader::setOptions(0);
 		AText16 stack;
 		for (int i = 0; i < 3; i++)
 		{

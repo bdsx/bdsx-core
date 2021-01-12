@@ -333,9 +333,22 @@ double NetFilter::getTime(Ipv4Address ip) noexcept
 	if (iter != s_ipfilter.end())
 	{
 		endtime = iter->second;
-		if (endtime == 0 && endtime < time(nullptr))
+		time_t now;
+		if (endtime == 0 && endtime < (now = time(nullptr)))
 		{
-			s_ipfilterLock.changeToWrite();
+			s_ipfilterLock.leaveRead();
+			// possible to change something, recheck all
+			s_ipfilterLock.enterWrite();
+
+			auto iter = s_ipfilter.find(ip);
+			if (iter != s_ipfilter.end())
+			{
+				endtime = iter->second;
+				if (endtime == 0 && endtime < now)
+				{
+					s_ipfilter.erase(iter);
+				}
+			}
 			s_ipfilter.erase(iter);
 			s_ipfilterLock.leaveWrite();
 			return -1.0;

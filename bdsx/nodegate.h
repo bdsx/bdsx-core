@@ -14,7 +14,10 @@ namespace nodegate
 
 	void initNativeModule(void* exports) noexcept;
 	void clearNativeModule() noexcept;
+	void _tickCallback() noexcept;
+	void error(JsValueRef err) noexcept;
 	int start(int argc, char** argv) noexcept;
+	void loopOnce() noexcept;
 	void loop(uint64_t hd_point) noexcept;
 }
 

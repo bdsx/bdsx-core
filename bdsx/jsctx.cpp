@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "jsctx.h"
+#include "nodegate.h"
 
 #include <KR3/win/windows.h>
 #include <conio.h>
@@ -118,4 +119,26 @@ Manual<MainContext> g_ctx;
 JsContextRef getBdsxJsContextRef() noexcept
 {
 	return g_ctx->getRaw();
+}
+void nodegate::_tickCallback() noexcept
+{
+	g_ctx->_tickCallback();
+}
+void nodegate::error(JsValueRef err) noexcept
+{
+	try
+	{
+		JsValue jserr((JsRawData)err);
+		JsValue stack = jserr.get(u"stack");
+		if (stack == undefined) stack = jserr.toString();
+		g_ctx->error(stack.cast<Text16>());
+	}
+	catch (JsException& err)
+	{
+		cerr << (Utf16ToAnsi)err.toString() << endl;
+	}
+	catch (...)
+	{
+		cerr << "[Error in error]" << endl;
+	}
 }

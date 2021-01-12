@@ -204,7 +204,7 @@ void VoidPointer::_setas(T value, int offset) throws(JsException)
 
 int64_t getBin64(Text16 text) noexcept
 {
-	size_t n = text.size();
+	size_t n = text.bytes();
 	if (n <= 4)
 	{
 		if (n <= 2)

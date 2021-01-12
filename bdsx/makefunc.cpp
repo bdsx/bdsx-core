@@ -31,14 +31,35 @@ enum class RawTypeId :int
 	Boolean,
 	JsValueRef,
 	Void,
-	PointerOrWrapper,
+	Pointer,
+	WrapperToNp,
+	WrapperToJs,
 	StructureReturn
 };
 
 namespace
 {
+
+	struct ThreadLocalAllocate
+	{
+		DWORD id;
+		ThreadLocalAllocate() noexcept
+		{
+			id = TlsAlloc();
+		}
+		~ThreadLocalAllocate() noexcept
+		{
+			TlsFree(id);
+		}
+	};
+	ThreadLocalAllocate returnPointIdAllocated;
+}
+extern "C" void* returnPoint = nullptr;
+extern "C" void makefunc_getout();
+
+namespace
+{
 	uintptr_t last_allocate = 1;
-	void* returnPoint = nullptr;
 
 	struct DeferField
 	{
@@ -47,24 +68,13 @@ namespace
 		JsValue np2js = JsNewSymbol((JsValue)u"makefunc.np2js");
 		JsPropertyId js2np_prop = JsPropertyId::fromSymbol(js2np);
 		JsPropertyId np2js_prop = JsPropertyId::fromSymbol(np2js);
+		JsPropertyId pthis = u"this";
+		JsPropertyId pstructureReturn = u"structureReturn";
+		JsPropertyId pnullableReturn = u"nullableReturn";
+		JsPropertyId pnullableThis = u"nullableThis";
+		JsPropertyId pnullableParams = u"nullableParams";
 	};
 	Deferred<DeferField> s_field(JsRuntime::initpack);
-
-	void* makeGetOutFunction() noexcept
-	{
-		JitFunction func(256);
-		func.mov(RDX, (qword)&returnPoint);
-		func.mov(RSP, QwordPtr, RDX);
-		func.pop(RDI);
-		func.pop(RSI);
-		func.pop(RBP);
-		func.pop(RCX);
-		func.mov(QwordPtr, RDX, RCX);
-		func.xor_(RAX, RAX);
-		func.ret();
-		return func.pointer();
-	}
-	void (* const _getout)() = (autoptr)makeGetOutFunction();
 
 	void* stack_alloc(size_t size) noexcept
 	{
@@ -77,7 +87,6 @@ namespace
 
 	void stack_free_all() noexcept
 	{
-
 		uintptr_t p = last_allocate;
 		if (p & 1) return;
 
@@ -113,7 +122,7 @@ namespace
 		stack_free_all();
 		JsErrorCode err = JsSetException(error);
 		_assert(err == JsNoError);
-		_getout();
+		makefunc_getout();
 	}
 
 	ATTR_NORETURN void getout_invalid_parameter(uint32_t paramNum) noexcept
@@ -146,7 +155,7 @@ namespace
 		if ((JsHasException(&has) == JsNoError) && has)
 		{
 			stack_free_all();
-			_getout();
+			makefunc_getout();
 		}
 		else
 		{
@@ -293,13 +302,45 @@ namespace
 
 	JsValueRef np2js_pointer(void* ptr, JsValueRef ctor) noexcept
 	{
-		JsScope _scope;
-		JsValue ctorv = JsClass((JsRawData)ctor).newInstanceRaw({});
-		VoidPointer* nptr = ctorv.getNativeObject<VoidPointer>();
-		_assert(nptr != nullptr);
-		nptr->setAddressRaw(ptr);
+		{
+			JsScope _scope;
+			try
+			{
+				JsValue ctorv = JsClass((JsRawData)ctor).newInstanceRaw({});
+				VoidPointer* nptr = ctorv.getNativeObject<VoidPointer>();
+				_assert(nptr != nullptr);
+				nptr->setAddressRaw(ptr);
 
-		return ctorv.getRaw();
+				return ctorv.getRaw();
+			}
+			catch (JsException& err)
+			{
+				JsSetException(err.getValue().getRaw());
+			}
+		}
+		getout(JsErrorScriptException);
+	}
+
+	JsValueRef np2js_pointer_nullable(void* ptr, JsValueRef ctor) noexcept
+	{
+		{
+			JsScope _scope;
+			try
+			{
+				if (ptr == nullptr) return JsValue(nullptr).getRaw();
+				JsValue ctorv = JsClass((JsRawData)ctor).newInstanceRaw({});
+				VoidPointer* nptr = ctorv.getNativeObject<VoidPointer>();
+				_assert(nptr != nullptr);
+				nptr->setAddressRaw(ptr);
+
+				return ctorv.getRaw();
+			}
+			catch (JsException& err)
+			{
+				JsSetException(err.getValue().getRaw());
+			}
+		}
+		getout(JsErrorScriptException);
 	}
 
 	JsValueRef js_pointer_new(JsValueRef ctor, JsValueRef* out) noexcept
@@ -343,7 +384,7 @@ namespace
 
 	struct FunctionTable
 	{
-		// void* p_getout = getout;
+		void* p_getout = getout;
 		void* p_np2js_wrapper = np2js_wrapper;
 		void* p_js2np_wrapper = js2np_wrapper;
 		void* p_stack_alloc = stack_alloc;
@@ -368,6 +409,7 @@ namespace
 		void* p_np2js_utf8 = np2js_utf8;
 		void* p_np2js_utf16 = np2js_utf16;
 		void* p_np2js_pointer = np2js_pointer;
+		void* p_np2js_pointer_nullable = np2js_pointer_nullable;
 		void* p_getout_invalid_parameter_count = getout_invalid_parameter_count;
 		void* p_JsCallFunction = JsCallFunction;
 		void* p_js_pointer_new = js_pointer_new;
@@ -480,25 +522,31 @@ namespace
 		switch (jstype)
 		{
 		case JsType::Function:
-			if (typeValue.get(s_field->js2np_prop).getType() != JsType::Function ||
-				typeValue.get(s_field->js2np_prop).getType() != JsType::Function)
+			if (typeValue.get(s_field->js2np_prop).getType() == JsType::Function)
 			{
-				// wrapper
+				return RawTypeId::WrapperToNp;
+			}
+			else if (typeValue.get(s_field->js2np_prop).getType() == JsType::Function)
+			{
+				return RawTypeId::WrapperToJs;
 			}
 			else
 			{
 				pointerClassOrThrow(paramNum, typeValue);
+				return RawTypeId::Pointer;
 			}
-			return RawTypeId::PointerOrWrapper;
 		case JsType::Integer:
 			// fall through
 		case JsType::Float:
 			return (RawTypeId)typeValue.valueOf().as<int>();
 		case JsType::Object:
-			if (typeValue.get(s_field->js2np_prop).getType() != JsType::Function ||
-				typeValue.get(s_field->js2np_prop).getType() != JsType::Function)
+			if (typeValue.get(s_field->js2np_prop).getType() == JsType::Function)
 			{
-				return RawTypeId::PointerOrWrapper;
+				return RawTypeId::WrapperToNp;
+			}
+			else if (typeValue.get(s_field->js2np_prop).getType() == JsType::Function)
+			{
+				return RawTypeId::WrapperToJs;
 			}
 			// fall through
 		default:
@@ -507,11 +555,8 @@ namespace
 
 	}
 
-	static const Register _regMap[] = { RAX, RCX, RDX, R8, R9 };
-	static const FloatRegister _fregMap[] = { XMM0, XMM0, XMM1, XMM2, XMM3 };
-
-	static const Register* const regMap = _regMap + 1;
-	static const FloatRegister* const fregMap = _fregMap + 1;
+	static const Register regMap[] = { RCX, RDX, R8, R9 };
+	static const FloatRegister fregMap[] = { XMM0, XMM1, XMM2, XMM3 };
 
 #define CALL(funcname) call(QwordPtr, RDI, (int32_t)offsetof(FunctionTable, p_##funcname)-(int32_t)centerOfFunctionTable);
 
@@ -525,35 +570,76 @@ namespace
 		RawTypeId typeId;
 	};
 
+	constexpr dword PARAM_OFFSET = 3;
+
 	class ParamInfoMaker
 	{
 	public:
 		const JsArguments& args;
-		int32_t structureReturn;
+		bool structureReturn;
+		bool nullableThis;
+		bool nullableReturn;
+		bool useThis;
+		bool nullableParams;
+		JsValue thisType;
+
 		TmpArray<RawTypeId> typeIds;
-		dword countOnMaking;
 		dword countOnCalling;
 		dword countOnCpp;
-		dword paramOffset;
-		int32_t useThis;
 
-		ParamInfoMaker(const JsArguments& args, uint32_t paramOffset) throws(JsException)
-			:args(args), paramOffset(paramOffset)
+		ParamInfoMaker(const JsArguments& args) throws(JsException)
+			:args(args)
 		{
-			countOnMaking = intact<uint32_t>(args.size());
-			if (countOnMaking < paramOffset) throw JsException(u"Too few parameters");
-			JsValue thisType = args[2].cast<JsValue>();
-			
-			if (paramOffset >= 4) structureReturn = args[3].cast<bool>() ? 1 : 0;
-			
-			useThis = (args[2] != nullptr) ? 1 : 0;
-			countOnCalling = countOnMaking - paramOffset;
+			uint32_t countOnMaking = intact<uint32_t>(args.size());
+			if (countOnMaking < PARAM_OFFSET - 1)
+			{
+				throw JsException(u"Too few parameters");
+			}
+			JsValue opts;
+			if (countOnMaking != PARAM_OFFSET - 1 && !(opts = args[2]).abstractEquals((JsRawData)nullptr))
+			{
+				structureReturn = opts.get(s_field->pstructureReturn).cast<bool>();
+				thisType = opts.get(s_field->pthis);
+				useThis = thisType.cast<bool>();
+				nullableReturn = opts.get(s_field->pnullableReturn).cast<bool>();
+				nullableThis = opts.get(s_field->pnullableThis).cast<bool>();
+				nullableParams = opts.get(s_field->pnullableParams).cast<bool>();
+				if (useThis)
+				{
+					if (!thisType.prototypeOf(VoidPointer::classObject))
+					{
+						throw JsException(u"Non pointer at this");
+					}
+				}
+				if (nullableThis)
+				{
+					if (!useThis) throw JsException(u"Invalid options. nullableThis without this type");
+				}
+				if (nullableReturn)
+				{
+					JsValue rettype = args[1];
+					if (!rettype.prototypeOf(VoidPointer::classObject)) throw JsException(u"Invalid options. nullableReturn with non pointer type");
+				}
+				if (nullableReturn && structureReturn)
+				{
+					throw JsException(u"Invalid options. nullableReturn with structureReturn");
+				}
+			}
+			else
+			{
+				structureReturn = 0;
+				useThis = 0;
+				nullableReturn = 0;
+				nullableThis = 0;
+			}
+
+			countOnCalling = countOnMaking == PARAM_OFFSET - 1 ? 0 : countOnMaking - PARAM_OFFSET;
 			countOnCpp = countOnCalling + useThis + structureReturn;
 
 			typeIds.reserve(countOnCpp);
+			if (useThis) typeIds.push(getRawTypeId(2, thisType));
 			if (structureReturn) typeIds.push(RawTypeId::StructureReturn);
-			if (useThis) typeIds.push(RawTypeId::PointerOrWrapper);
-			for (dword i = paramOffset; i < countOnMaking; i++)
+			for (dword i = PARAM_OFFSET; i < countOnMaking; i++)
 			{
 				RawTypeId type = getRawTypeId(i + 1, args[i]);
 				typeIds.push(type);
@@ -573,7 +659,15 @@ namespace
 				info.numberOnUsing = PARAMNUM_RETURN;
 				return info;
 			}
-			else if (structureReturn && indexOnCpp == 0)
+			else if (useThis && indexOnCpp == 0)
+			{
+				info.type = thisType;
+				info.numberOnMaking = 3;
+				info.typeId = typeIds[0];
+				info.numberOnUsing = PARAMNUM_THIS;
+				return info;
+			}
+			if (structureReturn && indexOnCpp == (uint32_t)useThis)
 			{
 				info.type = args[1];
 				info.numberOnMaking = 2;
@@ -581,17 +675,8 @@ namespace
 				info.numberOnUsing = PARAMNUM_RETURN;
 				return info;
 			}
-			if (useThis && indexOnCpp == structureReturn)
-			{
-				info.type = args[2];
-				info.numberOnMaking = 3;
-				info.typeId = RawTypeId::PointerOrWrapper;
-				info.numberOnUsing = PARAMNUM_THIS;
-				return info;
-			}
-			uint32_t indexOnUsing = indexOnCpp - structureReturn;
-			if (useThis) indexOnUsing--;
-			uint32_t indexOnMaking = paramOffset + indexOnUsing;
+			uint32_t indexOnUsing = indexOnCpp - structureReturn - useThis;
+			uint32_t indexOnMaking = PARAM_OFFSET + indexOnUsing;
 			info.type = args[indexOnMaking];
 			info.numberOnMaking = indexOnMaking + 1;
 			info.numberOnUsing = indexOnUsing + 1;
@@ -627,24 +712,12 @@ namespace
 		TargetInfo(Register reg, FloatRegister freg) noexcept
 			:reg(reg), freg(freg)
 		{
+			memory = false;
 		}
 		TargetInfo(Register reg, int32_t offset) noexcept
 			:reg(reg), offset(offset)
 		{
 			memory = true;
-		}
-		TargetInfo(int32_t target, int32_t offset) noexcept
-		{
-			if (memory = ((uint32_t)target + 1 >= 5))
-			{
-				reg = RBP;
-			}
-			else
-			{
-				reg = regMap[target];
-				freg = fregMap[target];
-			}
-			this->offset = offset;
 		}
 
 		TargetInfo tempPtr() noexcept
@@ -663,9 +736,11 @@ namespace
 
 	public:
 		int32_t stackSize;
+		int32_t offsetForStructureReturn;
+		ParamInfoMaker& pi;
 
-		Maker(size_t size, int32_t stackSize) noexcept
-			:JitFunction(size), stackSize(stackSize)
+		Maker(ParamInfoMaker& pi, size_t size, int32_t stackSize) noexcept
+			:JitFunction(size), pi(pi), stackSize(stackSize)
 		{
 			mov(RAX, (qword)&returnPoint);
 			mov(R10, QwordPtr, RAX);
@@ -681,22 +756,26 @@ namespace
 
 		~Maker() noexcept
 		{
-			add(RSP, stackSize+0x8); // pop(RDX)
+			add(RSP, stackSize);
+			pop(RCX);
 			pop(RBP);
 			pop(RSI);
 			pop(RDI);
+
+			mov(RDX, (qword)&returnPoint);
+			mov(QwordPtr, RDX, 0, RCX);
 			ret();
 		}
 
 		bool useStackAllocator = false;
 
-
 		void _mov(TargetInfo target, uint64_t value) noexcept {
 			
 			if (target.memory)
 			{
-				mov(RAX, value);
-				mov(QwordPtr, target.reg, target.offset, RAX);
+				Register temp = target.reg != R10 ? R10 : R11;
+				mov(temp, value);
+				mov(QwordPtr, target.reg, target.offset, temp);
 			}
 			else
 			{
@@ -707,19 +786,22 @@ namespace
 		void _mov(TargetInfo target, TargetInfo source, RawTypeId type, bool reverse) noexcept {
 			if (target.memory)
 			{
+				Register temp = target.reg != R10 ? R10 : R11;
+				FloatRegister ftemp = target.freg != XMM5 ? XMM5 : XMM6;
+
 				if (source.memory)
 				{
 					if (type == RawTypeId::FloatAsInt64)
 					{
 						if (reverse)
 						{
-							cvttsi2sd(XMM0, QwordPtr, source.reg, source.offset);
-							movsd(QwordPtr, target.reg, target.offset, XMM0);
+							cvttsi2sd(ftemp, QwordPtr, source.reg, source.offset);
+							movsd(QwordPtr, target.reg, target.offset, ftemp);
 						}
 						else
 						{
-							cvttsd2si(RAX, QwordPtr, source.reg, source.offset);
-							mov(QwordPtr, target.reg, target.offset, RAX);
+							cvttsd2si(temp, QwordPtr, source.reg, source.offset);
+							mov(QwordPtr, target.reg, target.offset, temp);
 						}
 					}
 					else if (type == RawTypeId::Boolean)
@@ -730,8 +812,8 @@ namespace
 						}
 						else
 						{
-							movzx(RAX, BytePtr, source.reg, source.offset);
-							mov(BytePtr, target.reg, target.offset, AL);
+							movzx(temp, BytePtr, source.reg, source.offset);
+							mov(BytePtr, target.reg, target.offset, temp);
 						}
 					}
 					else if (type == RawTypeId::Int32)
@@ -742,8 +824,8 @@ namespace
 						}
 						else
 						{
-							movsxd(RAX, DwordPtr, source.reg, source.offset);
-							mov(QwordPtr, target.reg, target.offset, RAX);
+							movsxd(temp, DwordPtr, source.reg, source.offset);
+							mov(QwordPtr, target.reg, target.offset, temp);
 						}
 					}
 					else
@@ -754,8 +836,8 @@ namespace
 						}
 						else
 						{
-							mov(RAX, QwordPtr, source.reg, source.offset);
-							mov(QwordPtr, target.reg, target.offset, RAX);
+							mov(temp, QwordPtr, source.reg, source.offset);
+							mov(QwordPtr, target.reg, target.offset, temp);
 						}
 					}
 				}
@@ -770,8 +852,8 @@ namespace
 						}
 						else
 						{
-							cvttsd2si(RAX, source.freg);
-							mov(QwordPtr, target.reg, target.offset, RAX);
+							cvttsd2si(temp, source.freg);
+							mov(QwordPtr, target.reg, target.offset, temp);
 						}
 					}
 					else if (type == RawTypeId::Float)
@@ -851,6 +933,135 @@ namespace
 			}
 		}
 
+		void _mov_from_ptr(TargetInfo target, TargetInfo source, RawTypeId type, bool reverse) noexcept {
+			Register temp = target.reg != R10 ? R10 : R11;
+			FloatRegister ftemp = target.freg != XMM5 ? XMM5 : XMM6;
+			if (target.memory)
+			{
+				if (source.memory)
+				{
+					mov(temp, QwordPtr, source.reg, source.offset);
+					if (type == RawTypeId::FloatAsInt64)
+					{
+						if (reverse)
+						{
+							cvttsi2sd(XMM0, QwordPtr, temp, 0);
+							movsd(QwordPtr, target.reg, target.offset, XMM0);
+						}
+						else
+						{
+							cvttsd2si(temp, QwordPtr, temp, 0);
+							mov(QwordPtr, target.reg, target.offset, temp);
+						}
+					}
+					else if (type == RawTypeId::Boolean)
+					{
+						movzx(temp, BytePtr, temp, 0);
+						mov(BytePtr, target.reg, target.offset, temp);
+					}
+					else if (type == RawTypeId::Int32)
+					{
+						movsxd(temp, DwordPtr, temp, 0);
+						mov(QwordPtr, target.reg, target.offset, temp);
+					}
+					else
+					{
+						mov(temp, QwordPtr, temp, 0);
+						mov(QwordPtr, target.reg, target.offset, temp);
+					}
+				}
+				else
+				{
+					if (type == RawTypeId::FloatAsInt64)
+					{
+						if (reverse)
+						{
+							mov(temp, QwordPtr, source.reg, 0);
+							cvttsi2sd(ftemp, temp);
+							movsd(QwordPtr, target.reg, target.offset, ftemp);
+						}
+						else
+						{
+							cvttsd2si(temp, QwordPtr, source.reg, 0);
+							mov(QwordPtr, target.reg, target.offset, temp);
+						}
+					}
+					else if (type == RawTypeId::Boolean)
+					{
+						movzx(temp, BytePtr, source.reg, 0);
+						mov(BytePtr, target.reg, target.offset, temp);
+					}
+					else
+					{
+						mov(temp, QwordPtr, source.reg, 0);
+						mov(QwordPtr, target.reg, target.offset, temp);
+					}
+				}
+			}
+			else
+			{
+				if (source.memory)
+				{
+					mov(temp, QwordPtr, source.reg, source.offset);
+					if (type == RawTypeId::FloatAsInt64)
+					{
+						if (reverse)
+						{
+							cvttsi2sd(target.freg, QwordPtr, temp, 0);
+						}
+						else
+						{
+							cvttsd2si(target.reg, QwordPtr, temp, 0);
+						}
+					}
+					else if (type == RawTypeId::Float)
+					{
+						movsd(target.freg, QwordPtr, temp, 0);
+					}
+					else if (type == RawTypeId::Boolean)
+					{
+						movzx(target.reg, BytePtr, temp, 0);
+					}
+					else if (type == RawTypeId::Int32)
+					{
+						movsxd(target.reg, DwordPtr, temp, 0);
+					}
+					else
+					{
+						mov(target.reg, QwordPtr, temp, 0);
+					}
+				}
+				else
+				{
+					if (type == RawTypeId::FloatAsInt64)
+					{
+						if (reverse)
+						{
+							cvttsi2sd(target.freg, QwordPtr, source.reg, 0);
+						}
+						else
+						{
+							cvttsd2si(target.reg, QwordPtr, source.reg, 0);
+						}
+					}
+					else
+					{
+						if (target != source)
+						{
+							if (type == RawTypeId::Float)
+							{
+								movsd(target.freg, QwordPtr, source.reg, 0);
+							}
+							else
+							{
+								mov(target.reg, QwordPtr, source.reg, 0);
+							}
+						}
+					}
+				}
+			}
+		}
+
 		void nativeToJs(const ParamInfo &info, TargetInfo target, TargetInfo source) throws(JsException)
 		{
 			switch (info.typeId)
@@ -859,28 +1070,59 @@ namespace
 				_mov(target, TARGET_RETURN, RawTypeId::Void, true);
 				break;
 			}
-			case RawTypeId::PointerOrWrapper: {
-				JsValue np2js = info.type.get(s_field->np2js_prop);
-				if (np2js.getType() != JsType::Function)
+			case RawTypeId::WrapperToNp:
+			case RawTypeId::Pointer: {
+				pointerClassOrThrow(info.numberOnMaking, info.type);
+
+				JsValueRef rawvalue = info.type.getRaw();
+				JsAddRef(rawvalue, nullptr);
+
+				_mov(TARGET_1, source, RawTypeId::Void, true);
+				mov(RDX, (qword)rawvalue);
+				if (info.numberOnUsing == PARAMNUM_RETURN)
 				{
-					pointerClassOrThrow(info.numberOnMaking, info.type);
-
-					JsValueRef rawvalue = info.type.getRaw();
-					JsAddRef(rawvalue, nullptr);
-
-					_mov(TARGET_1, source, RawTypeId::Void, true);
-					mov(RDX, (qword)rawvalue);
-					CALL(np2js_pointer);
+					if (pi.nullableReturn)
+					{
+						CALL(np2js_pointer_nullable);
+					}
+					else
+					{
+						CALL(np2js_pointer);
+					}
+				}
+				else if (info.numberOnUsing == PARAMNUM_THIS)
+				{
+					if (pi.nullableThis)
+					{
+						CALL(np2js_pointer_nullable);
+					}
+					else
+					{
+						CALL(np2js_pointer);
+					}
 				}
 				else
 				{
-					JsValueRef np2jsraw = np2js.getRaw();
-					JsAddRef(np2jsraw, nullptr);
-
-					_mov(TARGET_1, source, RawTypeId::Void, true);
-					mov(RDX, (qword)np2jsraw);
-					CALL(np2js_wrapper);
+					if (pi.nullableParams)
+					{
+						CALL(np2js_pointer_nullable);
+					}
+					else
+					{
+						CALL(np2js_pointer);
+					}
 				}
+				_mov(target, TARGET_RETURN, RawTypeId::Void, true);
+				break;
+			}
+			case RawTypeId::WrapperToJs: {
+				JsValue np2js = info.type.get(s_field->np2js_prop);
+				JsValueRef np2jsraw = np2js.getRaw();
+				JsAddRef(np2jsraw, nullptr);
+
+				_mov(TARGET_1, source, RawTypeId::Void, true);
+				mov(RDX, (qword)np2jsraw);
+				CALL(np2js_wrapper);
 				_mov(target, TARGET_RETURN, RawTypeId::Void, true);
 				break;
 			}
@@ -952,8 +1194,12 @@ namespace
 				break;
 			case RawTypeId::Bin64: {
 				TargetInfo temp = target.tempPtr();
-				_mov(temp, source, info.typeId, true);
-				mov(RCX, RBP);
+				if (source.memory) lea(RCX, source.reg, source.offset);
+				else
+				{
+					lea(RCX, RBP, 8);
+					mov(QwordPtr, RCX, 0, source.reg);
+				}
 				mov(RDX, (dword)4);
 				lea(R8, temp.reg, temp.offset);
 				CALL(JsPointerToString);
@@ -980,28 +1226,47 @@ namespace
 			switch (info.typeId)
 			{
 			case RawTypeId::StructureReturn: {
+				lea(RDX, RBP, offsetForStructureReturn);
 				mov(RCX, (qword)info.type.getRaw());
-				mov(RDX, RAX);
 				CALL(js_pointer_new);
 				_mov(target, TARGET_RETURN, RawTypeId::Void, true);
 				break;
 			}
-			case RawTypeId::PointerOrWrapper: {
+			case RawTypeId::WrapperToNp: {
 				JsValue js2np = info.type.get(s_field->js2np_prop);
-				if (js2np.getType() != JsType::Function)
-				{
-					pointerClassOrThrow(info.numberOnMaking, info.type);
-					_mov(TARGET_1, source, RawTypeId::Void, false);
-					CALL(js2np_pointer);
-				}
-				else
-				{
-					JsValueRef js2npraw = js2np.getRaw();
-					JsAddRef(js2npraw, nullptr);
+				JsValueRef js2npraw = js2np.getRaw();
+				JsAddRef(js2npraw, nullptr);
 
-					_mov(TARGET_1, source, RawTypeId::Void, true);
-					mov(RDX, (qword)js2npraw);
-					CALL(js2np_wrapper);
+				_mov(TARGET_1, source, RawTypeId::Void, true);
+				mov(RDX, (qword)js2npraw);
+				CALL(js2np_wrapper);
+				if (info.numberOnUsing == PARAMNUM_THIS)
+				{
+					if (!pi.nullableThis)
+					{
+						test(RAX, RAX);
+						jnz(9);
+						mov(RCX, info.numberOnUsing);
+						CALL(getout_invalid_parameter);
+					}
+				}
+				_mov(target, TARGET_RETURN, RawTypeId::Void, false);
+				break;
+			}
+			case RawTypeId::WrapperToJs:
+			case RawTypeId::Pointer: {
+				pointerClassOrThrow(info.numberOnMaking, info.type);
+				_mov(TARGET_1, source, RawTypeId::Void, false);
+				CALL(js2np_pointer);
+				if (info.numberOnUsing == PARAMNUM_THIS)
+				{
+					if (!pi.nullableThis)
+					{
+						test(RAX, RAX);
+						jnz(9);
+						mov(RCX, info.numberOnUsing);
+						CALL(getout_invalid_parameter);
+					}
 				}
 				_mov(target, TARGET_RETURN, RawTypeId::Void, false);
 				break;
@@ -1082,7 +1347,6 @@ namespace
 				break;
 			case RawTypeId::Bin64:
 				_mov(TARGET_1, source, RawTypeId::Void, false);
-				mov(RCX, QwordPtr, RSI);
 				mov(RDX, info.numberOnUsing);
 				CALL(bin64);
 				_mov(target, TARGET_RETURN, info.typeId, false);
@@ -1106,9 +1370,12 @@ namespace
 
 JsValue functionFromNative(const JsArguments& args) throws(JsException, JsValue)
 {
-	VoidPointer* nativeptr = pointerInstanceOrThrow(args[0], 1);
-	ParamInfoMaker pimaker(args, 4);
+	VoidPointer* targetfuncptr;
+	JsValue targetfuncjs = args[0];
+	JsValue vfoff = targetfuncjs.get(0);
 
+	ParamInfoMaker pimaker(args);
+	
 	// JsValueRef( * JsNativeFunction)(JsValueRef callee, bool isConstructCall, JsValueRef *arguments, unsigned short argumentCount, void *callbackState);
 
 	int paramsSize = pimaker.countOnCpp * 8;
@@ -1123,7 +1390,16 @@ JsValue functionFromNative(const JsArguments& args) throws(JsException, JsValue)
 	stackSize = ((stackSize + 0xf) & ~0xf);
 	stackSize += alignmentOffset;
 
-	Maker func(512, stackSize);
+	Maker func(pimaker, 512, stackSize);
+	if (vfoff == undefined)
+	{
+		targetfuncptr = pointerInstanceOrThrow(targetfuncjs, 1);
+	}
+	else
+	{
+		targetfuncptr = nullptr;
+		if (pimaker.nullableThis) throw JsException(u"Cannot use nullableThis at the virtual function");
+	}
 	if (pimaker.countOnCalling != 0)
 	{
 		func.cmp(R9, (int)(pimaker.countOnCalling + 1));
@@ -1133,9 +1409,12 @@ JsValue functionFromNative(const JsArguments& args) throws(JsException, JsValue)
 		JUMP(getout_invalid_parameter_count); // 3 bytes
 	}
 	func.mov(RSI, R8);
+	func.lea(RBP, RSP, - func.stackSize + paramsSize);
 
-	if (pimaker.structureReturn) func.lea(RAX, RSP, -8);
-	func.lea(RBP, RSP, paramsSize - func.stackSize);
+	if (pimaker.structureReturn)
+	{
+		func.offsetForStructureReturn = func.stackSize - paramsSize - 8;
+	}
 
 	if (pimaker.countOnCpp > 1)
 	{
@@ -1143,12 +1422,12 @@ JsValue functionFromNative(const JsArguments& args) throws(JsException, JsValue)
 		func.sub(RSP, func.stackSize + stackSizeForConvert);
 
 		uint32_t last = pimaker.countOnCpp - 1;
-		int32_t offset = - paramsSize;
+		int32_t offset = -paramsSize;
 		for (dword i = 0; i < pimaker.countOnCpp; i++)
 		{
 			ParamInfo info = pimaker.getInfo(i);
-			func.jsToNative(info, 
-				i != last ? TargetInfo(RBP, offset) : TargetInfo(i, offset), 
+			func.jsToNative(info,
+				i != last ? TargetInfo(RBP, offset) : i < 4 ? TargetInfo(regMap[i], fregMap[i]) : TargetInfo(RBP, offset),
 				TargetInfo(RSI, info.numberOnUsing * 8));
 			offset += 8;
 		}
@@ -1221,44 +1500,60 @@ JsValue functionFromNative(const JsArguments& args) throws(JsException, JsValue)
 		}
 	}
 
-	func.call(nativeptr->getAddressRaw(), RAX);
+	if (targetfuncptr != nullptr)
+	{
+		func.call(targetfuncptr->getAddressRaw(), RAX);
+	}
+	else
+	{
+		int32_t funcoff = vfoff.cast<int>();
+		int32_t thisoff = targetfuncjs.get(1).cast<int>();
+		func.mov(RAX, QwordPtr, RCX, thisoff);
+		func.call(QwordPtr, RAX, funcoff);
+	}
 
 	JsValue retType = args[1];
 	RawTypeId retTypeCode = getRawTypeId(PARAMNUM_RETURN, retType);
+	if (retTypeCode != RawTypeId::Float)
+	{
+		func.mov(QwordPtr, RBP, RAX);
+	}
+	else
+	{
+		func.movsd(QwordPtr, RBP, 0, XMM0);
+	}
 	if (func.useStackAllocator)
 	{
-		if (retTypeCode != RawTypeId::Float)
-		{
-			func.mov(QwordPtr, RBP, RAX);
-		}
-		else
-		{
-			func.movsd(QwordPtr, RBP, 0, XMM0);
-		}
 		func.mov(RDX, (qword)&last_allocate);
 		func.xor_(QwordPtr, RDX, 0, 1);
 		CALL(stack_free_all);
 	}
 
+	func.lea(RCX, RBP, 8);
+	byte* jumplen = func.end();
 	if (pimaker.structureReturn)
 	{
-		func.mov(RAX, QwordPtr, RBP, -paramsSize + func.stackSize - 8);
+		func.mov(RAX, QwordPtr, RBP, func.stackSize - paramsSize - 8);
 	}
 	else
 	{
-		func.nativeToJs(pimaker.getInfo(-1), TARGET_RETURN, func.useStackAllocator ? TargetInfo(RBP, 0) : TARGET_RETURN);
+		func.nativeToJs(pimaker.getInfo(-1), TARGET_RETURN, TargetInfo(RBP, 0));
 	}
+
 	void* funcptr = func.pointer();
 	JsValueRef funcref;
 	JsErrorCode err = JsCreateFunction((JsNativeFunction)funcptr, nullptr, &funcref);
 	if (err != JsNoError) _throwJsrtError(err);
 	JsValue funcout = (JsRawData)funcref;
-	funcout.set(s_field->pointer, nativeptr);
+	if (targetfuncptr != nullptr)
+	{
+		funcout.set(s_field->pointer, targetfuncjs);
+	}
 	return funcout;
 }
 JsValue functionToNative(const JsArguments& args) throws(JsException, JsValue)
 {
-	ParamInfoMaker pimaker(args, 3);
+	ParamInfoMaker pimaker(args);
 
 	JsValue jsfunc = args[0];
 	JsAddRef(jsfunc.getRaw(), nullptr);
@@ -1276,7 +1571,7 @@ JsValue functionToNative(const JsArguments& args) throws(JsException, JsValue)
 	stackSize = ((stackSize + 0xf) & ~0xf);
 	stackSize += alignmentOffset;
 
-	Maker func(512, stackSize);
+	Maker func(pimaker, 512, stackSize);
 
 	// 0x20~0x28 - return address
 	// 0x00~0x20 - pushed data
@@ -1330,10 +1625,14 @@ JsValue functionToNative(const JsArguments& args) throws(JsException, JsValue)
 	func.lea(RDX, RSP, 0x20);
 	func.mov(R8, pimaker.countOnCalling+1);
 	func.mov(R9, RBP);
-
 	CALL(JsCallFunction);
 
-	func.jsToNative(pimaker.getInfo(-1), TARGET_RETURN, TARGET_RETURN);
+	func.test(RAX, RAX);
+	func.jz(6);
+	func.mov(RCX, RAX);
+	CALL(getout);
+
+	func.jsToNative(pimaker.getInfo(-1), TARGET_RETURN, TargetInfo(RBP, 0));
 
 	JsValue resultptr = VoidPointer::newInstanceRaw({});
 	resultptr.getNativeObject<VoidPointer>()->setAddressRaw(func.pointer());

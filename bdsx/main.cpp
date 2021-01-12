@@ -53,6 +53,8 @@ namespace
 		nativeStack << writer;
 		return nativeStack;
 	}
+
+	Manual<JsScope> s_globalScope;
 }
 
 Initializer<Socket> __init;
@@ -111,10 +113,12 @@ BOOL WINAPI DllMain(
 		}
 
 		// load pdb
-		g_pdb.open();
-		g_pdb.getProcAddresses(View<Text>{ "__scrt_common_main_seh"_tx }, [](Text name, void* fnptr) {
-			s_bedrockSehMain = (__scrt_common_main_seh_t)fnptr;
-			});
+		if (g_pdb.open())
+		{
+			g_pdb.getProcAddresses(View<Text>{ "__scrt_common_main_seh"_tx }, [](Text name, void* fnptr) {
+				s_bedrockSehMain = (__scrt_common_main_seh_t)fnptr;
+				});
+		}
 		if (s_bedrockSehMain == nullptr)
 		{
 			cerr << "[BDSX] Failed to find entry of bedrock_server.exe" << endl;
@@ -171,54 +175,60 @@ void tester(void* sharedptr, int value) noexcept
 void nodegate::initNativeModule(void* exports_raw) noexcept
 {
 	g_ctx.create();
-	JsScope _scope;
-	JsValue exports = (JsRawData)(JsValueRef)exports_raw;
-
-	exports.set(u"VoidPointer", VoidPointer::classObject);
-	exports.set(u"StaticPointer", StaticPointer::classObject);
-	exports.set(u"AllocatedPointer", AllocatedPointer::classObject);
-	exports.set(u"NativePointer", NativePointer::classObject);
-	exports.set(u"StructurePointer", StructurePointer::classObject);
-	exports.set(u"RuntimeError" , runtimeError::getRuntimeErrorClass());
-	exports.set(u"MultiThreadQueue", MultiThreadQueue::classObject);
-
 	{
-		JsValue bedrock_server_exe = JsNewObject;
-		exports.set(u"bedrock_server_exe", bedrock_server_exe);
-		bedrock_server_exe.set(u"md5", g_pdb.getMd5());
-		bedrock_server_exe.set(u"argc", s_argc);
-		bedrock_server_exe.set(u"args", VoidPointer::make(s_args));
-		bedrock_server_exe.set(u"argsLine", (Text16)unwide(GetCommandLineW()));
-		bedrock_server_exe.set(u"main", VoidPointer::make(s_bedrockMain));
-		bedrock_server_exe.setMethod(u"forceKill", kr::terminate);
+		JsScope _scope;
+		JsValue exports = (JsRawData)(JsValueRef)exports_raw;
+
+		exports.set(u"VoidPointer", VoidPointer::classObject);
+		exports.set(u"StaticPointer", StaticPointer::classObject);
+		exports.set(u"AllocatedPointer", AllocatedPointer::classObject);
+		exports.set(u"NativePointer", NativePointer::classObject);
+		exports.set(u"StructurePointer", StructurePointer::classObject);
+		exports.set(u"RuntimeError", runtimeError::getRuntimeErrorClass());
+		exports.set(u"MultiThreadQueue", MultiThreadQueue::classObject);
+
+		{
+			JsValue bedrock_server_exe = JsNewObject;
+			exports.set(u"bedrock_server_exe", bedrock_server_exe);
+			bedrock_server_exe.set(u"md5", g_pdb.getMd5());
+			bedrock_server_exe.set(u"argc", s_argc);
+			bedrock_server_exe.set(u"args", VoidPointer::make(s_args));
+			bedrock_server_exe.set(u"argsLine", (Text16)unwide(GetCommandLineW()));
+			bedrock_server_exe.set(u"main", VoidPointer::make(s_bedrockMain));
+			bedrock_server_exe.setMethod(u"forceKill", kr::terminate);
+		}
+
+		{
+			JsValue cgate = JsNewObject;
+			exports.set(u"cgate", cgate);
+
+			cgate.set(u"GetProcAddress", VoidPointer::make(GetProcAddress));
+			cgate.set(u"GetModuleHandleW", VoidPointer::make(GetModuleHandleW));
+			cgate.setMethod(u"nodeLoopOnce", nodegate::loopOnce);
+			cgate.set(u"nodeLoop", VoidPointer::make(nodegate::loop));
+			cgate.set(u"tester", VoidPointer::make(tester));
+
+			cgate.setMethod(u"allocExecutableMemory", [](uint64_t size) {
+				hook::ExecutableAllocator* alloc = hook::ExecutableAllocator::getInstance();
+				StaticPointer* ptr = StaticPointer::newInstance();
+				ptr->setAddressRaw(alloc->alloc(size));
+				return ptr;
+				});
+		}
+
+		exports.set(u"ipfilter", getNetFilterNamespace());
+		exports.set(u"jshook", getJsHookNamespace());
+		exports.set(u"makefunc", getMakeFuncNamespace());
+		exports.set(u"runtimeError", runtimeError::getNamespace());
+		exports.set(u"pdb", getPdbNamespace());
+		exports.set(u"uv_async", getUvAsyncNamespace());
 	}
-
-	{
-		JsValue cgate = JsNewObject;
-		exports.set(u"cgate", cgate);
-		
-		cgate.set(u"GetProcAddress", VoidPointer::make(GetProcAddress));
-		cgate.set(u"GetModuleHandleW", VoidPointer::make(GetModuleHandleW));
-		cgate.set(u"nodeLoop", VoidPointer::make(nodegate::loop));
-		cgate.set(u"tester", VoidPointer::make(tester));
-
-		cgate.setMethod(u"allocExecutableMemory", [](uint64_t size) {
-			hook::ExecutableAllocator* alloc = hook::ExecutableAllocator::getInstance();
-			StaticPointer* ptr = StaticPointer::newInstance();
-			ptr->setAddressRaw(alloc->alloc(size));
-			return ptr;
-			});
-	}
-
-	exports.set(u"ipfilter", getNetFilterNamespace());
-	exports.set(u"jshook", getJsHookNamespace());
-	exports.set(u"makefunc", getMakeFuncNamespace());
-	exports.set(u"runtimeError", runtimeError::getNamespace());
-	exports.set(u"pdb", getPdbNamespace());
-	exports.set(u"uv_async", getUvAsyncNamespace());
+	s_globalScope.create();
 }
 void nodegate::clearNativeModule() noexcept
 {
+	s_globalScope.remove();
+
 	g_ctx.remove();
 	JsRuntime::setRuntime(nullptr);
 }

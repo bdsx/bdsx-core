@@ -56,11 +56,21 @@ namespace
         v8::Local<v8::Context> context) noexcept
     {
         s_inited = true;
-
         v8::Isolate* isolate = context->GetIsolate();
         node::AddEnvironmentCleanupHook(isolate, [](void*) { clear();  }, nullptr);
         nodegate::initNativeModule(*exports);
         atexit(clear);
+    }
+
+    void codeCheckPost() noexcept
+    {
+        JsValueRef exception;
+        JsErrorCode err = JsGetAndClearException(&exception);
+        if (err == JsNoError)
+        {
+            nodegate::error(exception);
+        }
+        nodegate::_tickCallback();
     }
 
 }
@@ -69,6 +79,24 @@ NODE_MODULE_CONTEXT_AWARE(bdsx_core, init);
 int nodegate::start(int argc, char** argv) noexcept
 {
     return node::Start(argc, argv);
+}
+void nodegate::loopOnce() noexcept
+{
+    if (s_checkAsyncInAsync)
+    {
+        if (s_asyncRef == 0) return;
+        uv_async_send(&s_processTask);
+        s_checkAsyncInAsync = false;
+    }
+
+    uv_loop_t* loop = uv_default_loop();
+    int counter = 0;
+    for (;;)
+    {
+        counter++;
+        if (uv_run(loop, UV_RUN_NOWAIT) == 0) break;
+        if (counter > 30) break;
+    }
 }
 void nodegate::loop(uint64_t hd_point) noexcept
 {
@@ -159,11 +187,13 @@ void AsyncTask::open() noexcept
                     task->fn(task);
                     task->release();
                     s_checkAsyncInAsync = false;
+                    codeCheckPost();
                 }
                 else
                 {
                     task->fn(task);
                     task->release();
+                    codeCheckPost();
                     break;
                 }
             }
