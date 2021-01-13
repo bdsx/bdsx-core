@@ -3,14 +3,15 @@ extrn returnPoint:near;
 
 _TEXT segment
 makefunc_getout proc
-		mov rdx, qword ptr[returnPoint];
-		mov rsp, qword ptr[rdx];
+		mov rsp, qword ptr[returnPoint];
+		and rsp, -2;
+
 		pop rcx;
 		pop rbp;
 		pop rsi;
 		pop rdi;
 
-		mov qword ptr[rdx], rcx;
+		mov qword ptr[returnPoint], rcx;
 		xor rax, rax;
 		ret;
 makefunc_getout endp

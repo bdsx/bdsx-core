@@ -158,6 +158,23 @@ void runtimeError::setHandler(kr::JsValue handler) noexcept
 {
 	s_field->handler = handler;
 }
+void runtimeError::fire(kr::JsValue error) noexcept
+{
+	JsScope _scope;
+	try
+	{
+		JsValue handler = s_field->handler;
+		if (!handler.isEmpty())
+		{
+			handler.call(error);
+		}
+	}
+	catch (JsException& err)
+	{
+		g_ctx->error(err);
+	}
+	terminate(-1);
+}
 SehHandler* runtimeError::beginHandler() noexcept
 {
 	return (SehHandler*)_set_se_translator([](unsigned int code, EXCEPTION_POINTERS* exptr) {

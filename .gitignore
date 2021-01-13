@@ -1,7 +1,6 @@
 /.vs
 bin
-/release/bin
-/release-zip
+/release
 /bdsx.zip
 /downloaded-bds
 /bdsx/buildtime.h

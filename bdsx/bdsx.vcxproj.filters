@@ -52,4 +52,7 @@
   <ItemGroup>
     <MASM Include="getout.asm" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="version.bat" />
+  </ItemGroup>
 </Project>

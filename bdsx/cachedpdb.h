@@ -21,8 +21,8 @@ public:
 	int getOptions() noexcept;
 	void getProcAddresses(kr::View<kr::Text> text, void(*cb)(kr::Text name, void* fnptr)) noexcept;
 	kr::JsValue getProcAddresses(kr::JsValue out, kr::JsValue array, bool quiet) throws(kr::JsException);
-	void search(kr::JsValue masks, kr::JsValue cb, bool quiet) throws(kr::JsException);
-	kr::JsValue getAll(bool quiet, int total) throws(kr::JsException);
+	void search(kr::JsValue masks, kr::JsValue cb) throws(kr::JsException);
+	kr::JsValue getAll(kr::JsValue onprogress) throws(kr::JsException);
 };
 
 extern CachedPdb g_pdb;

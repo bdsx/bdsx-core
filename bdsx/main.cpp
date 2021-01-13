@@ -62,6 +62,9 @@ Initializer<Socket> __init;
 
 int nodeStart(int argc, char** argv) noexcept
 {
+	size_t a = 0;
+	uint32_t v = (uint32_t)((a >> 32) ^ a);
+
 	__try
 	{
 		return nodegate::start(argc, argv);
