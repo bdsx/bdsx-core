@@ -12,6 +12,7 @@
 #include "jsctx.h"
 #include "uvasync.h"
 #include "mtqueue.h"
+#include "gen/version.h"
 
 #include <KR3/win/windows.h>
 #include <KRWin/hook.h>
@@ -205,6 +206,7 @@ void nodegate::initNativeModule(void* exports_raw) noexcept
 			JsValue cgate = JsNewObject;
 			exports.set(u"cgate", cgate);
 
+			cgate.set(u"bdsxCoreVersion", CONCAT(u, BDSX_CORE_VERSION));
 			cgate.set(u"GetProcAddress", VoidPointer::make(GetProcAddress));
 			cgate.set(u"GetModuleHandleW", VoidPointer::make(GetModuleHandleW));
 			cgate.setMethod(u"nodeLoopOnce", nodegate::loopOnce);

@@ -53,6 +53,6 @@
     <MASM Include="getout.asm" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="version.bat" />
+    <CustomBuild Include="version.bat" />
   </ItemGroup>
 </Project>

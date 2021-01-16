@@ -568,7 +568,7 @@ void StaticPointer::initMethods(JsClassT<StaticPointer>* cls) noexcept
 	cls->setMethod(u"getUint8", &StaticPointer::getUint8);
 	cls->setMethod(u"getUint16", &StaticPointer::getUint16);
 	cls->setMethod(u"getUint32", &StaticPointer::getUint32);
-	cls->setMethod(u"getUint64AsFloat", &StaticPointer::getInt64AsFloat);
+	cls->setMethod(u"getUint64AsFloat", &StaticPointer::getUint64AsFloat);
 	cls->setMethod(u"getInt8", &StaticPointer::getInt8);
 	cls->setMethod(u"getInt16", &StaticPointer::getInt16);
 	cls->setMethod(u"getInt32", &StaticPointer::getInt32);
@@ -588,11 +588,11 @@ void StaticPointer::initMethods(JsClassT<StaticPointer>* cls) noexcept
 	cls->setMethod(u"setUint8", &StaticPointer::setUint8);
 	cls->setMethod(u"setUint16", &StaticPointer::setUint16);
 	cls->setMethod(u"setUint32", &StaticPointer::setUint32);
-	cls->setMethod(u"setUint64WithFloat", &StaticPointer::getInt64AsFloat);
+	cls->setMethod(u"setUint64WithFloat", &StaticPointer::setUint64WithFloat);
 	cls->setMethod(u"setInt8", &StaticPointer::setInt8);
 	cls->setMethod(u"setInt16", &StaticPointer::setInt16);
 	cls->setMethod(u"setInt32", &StaticPointer::setInt32);
-	cls->setMethod(u"setInt64WithFloat", &StaticPointer::getInt64AsFloat);
+	cls->setMethod(u"setInt64WithFloat", &StaticPointer::setInt64WithFloat);
 	cls->setMethod(u"setFloat32", &StaticPointer::setFloat32);
 	cls->setMethod(u"setFloat64", &StaticPointer::setFloat64);
 	cls->setMethod(u"setPointer", &StaticPointer::setPointer);

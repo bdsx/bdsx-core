@@ -7,7 +7,7 @@
 #include "uv.h"
 #pragma warning(pop)
 
-#pragma comment(lib, "chakracore.lib")
+#pragma comment(lib, "chakra.lib")
 #pragma comment(lib, "cares.lib")
 #pragma comment(lib, "chakrashim.lib")
 #pragma comment(lib, "http_parser.lib")
