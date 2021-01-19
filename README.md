@@ -11,9 +11,10 @@ It's the core for [bdsx](https://github.com/karikera/bdsx)
 [NASM](https://www.nasm.us/) & Set PATH - required by node-chakracore  
 [Python2.x](https://www.python.org/downloads/release/python-2718/) & Set PATH - required by node-chakracore  
 
-1. Clone bdsx-core, bdsx, ken(ken is a personal library project)  
+1. Clone bdsx-core, elementminus, ken
 **[parent directory]**  
-├ ken (https://github.com/karikera/ken)  
+├ ken (https://github.com/karikera/ken) - personal library project  
+├ elementminus (https://github.com/karikera/elementminus) - dll injecter for BDS  
 └ bdsx-core (https://github.com/karikera/bdsx-core)  
 
 2. Update git submodules.

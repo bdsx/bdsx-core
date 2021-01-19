@@ -75,6 +75,10 @@ namespace
 		JsPropertyId pnullableReturn = u"nullableReturn";
 		JsPropertyId pnullableThis = u"nullableThis";
 		JsPropertyId pnullableParams = u"nullableParams";
+		JsPropertyId pnativeDebugBreak = u"nativeDebugBreak";
+#ifndef NDEBUG
+		JsPropertyId pnativeDebugBreakOnMake = u"nativeDebugBreakOnMake";
+#endif
 	};
 	Deferred<DeferField> s_field(JsRuntime::initpack);
 
@@ -361,11 +365,19 @@ namespace
 
 	JsValueRef js_pointer_new(JsValueRef ctor, JsValueRef* out) noexcept
 	{
-		JsValue ctorv = JsClass((JsRawData)ctor).newInstanceRaw({JsValue(true)});
-		*out = ctorv.getRaw();
+		try
+		{
+			JsValue ctorv = JsClass((JsRawData)ctor).newInstanceRaw({ JsValue(true) });
+			*out = ctorv.getRaw();
 
-		VoidPointer* nptr = ctorv.getNativeObject<VoidPointer>();
-		return nptr->getAddressRaw();
+			VoidPointer* nptr = ctorv.getNativeObject<VoidPointer>();
+			return nptr->getAddressRaw();
+		}
+		catch (JsException& err)
+		{
+			JsSetException(err.getValue().getRaw());
+		}
+		getout(JsErrorScriptException);
 	}
 
 	int64_t bin64(JsValueRef value, uint32_t paramNum) noexcept
@@ -405,8 +417,8 @@ namespace
 		catch (JsException& err)
 		{
 			JsSetException(err.getValue().getRaw());
-			return nullptr;
 		}
+		getout(JsErrorScriptException);
 	}
 	JsValueRef np2js_wrapper_nullable(void* ptr, JsValueRef func, JsValueRef ctor) noexcept
 	{
@@ -428,8 +440,8 @@ namespace
 		catch (JsException& err)
 		{
 			JsSetException(err.getValue().getRaw());
-			return nullptr;
 		}
+		getout(JsErrorScriptException);
 	}
 
 	struct FunctionTable
@@ -633,6 +645,7 @@ namespace
 		bool nullableReturn;
 		bool useThis;
 		bool nullableParams;
+		bool nativeDebugBreak;
 		JsValue thisType;
 
 		TmpArray<RawTypeId> typeIds;
@@ -656,6 +669,13 @@ namespace
 				nullableReturn = opts.get(s_field->pnullableReturn).cast<bool>();
 				nullableThis = opts.get(s_field->pnullableThis).cast<bool>();
 				nullableParams = opts.get(s_field->pnullableParams).cast<bool>();
+				nativeDebugBreak = opts.get(s_field->pnativeDebugBreak).cast<bool>();
+#ifndef NDEBUG
+				if (opts.get(s_field->pnativeDebugBreakOnMake).cast<bool>())
+				{
+					debug();
+				}
+#endif
 				if (useThis)
 				{
 					if (!thisType.prototypeOf(VoidPointer::classObject))
@@ -679,10 +699,12 @@ namespace
 			}
 			else
 			{
-				structureReturn = 0;
-				useThis = 0;
-				nullableReturn = 0;
-				nullableThis = 0;
+				structureReturn = false;
+				useThis = false;
+				nullableReturn = false;
+				nullableThis = false;
+				nullableParams = false;
+				nativeDebugBreak = false;
 			}
 
 			countOnCalling = countOnMaking == PARAM_OFFSET - 1 ? 0 : countOnMaking - PARAM_OFFSET;
@@ -799,6 +821,8 @@ namespace
 		Maker(ParamInfoMaker& pi, size_t size, int32_t stackSize, bool useGetOut) noexcept
 			:JitFunction(size), pi(pi), stackSize(stackSize)
 		{
+			if (pi.nativeDebugBreak) debugBreak();
+
 			mov(RAX, (qword)&returnPoint);
 			mov(R10, QwordPtr, RAX);
 
@@ -1287,7 +1311,10 @@ namespace
 			{
 			case RawTypeId::StructureReturn: {
 				lea(RDX, RBP, offsetForStructureReturn);
-				mov(RCX, (qword)info.type.getRaw());
+
+				JsValueRef ref = info.type.getRaw();
+				JsAddRef(ref, nullptr);
+				mov(RCX, (qword)ref);
 				CALL(js_pointer_new);
 				_mov(target, TARGET_RETURN, RawTypeId::Void, true);
 				break;

@@ -1,6 +1,3 @@
 [submodule "node-chakracore"]
 	path = node-chakracore
 	url = https://github.com/karikera/node-chakracore
-[submodule "elementminus"]
-	path = elementminus
-	url = https://github.com/karikera/elementminus.git
