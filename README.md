@@ -3,7 +3,7 @@
 It's the core for [bdsx](https://github.com/bdsx/bdsx)
 
 ## Build It Self
-* Requirement
+* Requirement  
 [Visual Studio 2019](https://visualstudio.microsoft.com/)  
 [Visual Studio Code](https://code.visualstudio.com/)  
 [NASM](https://www.nasm.us/) & Set PATH - required by node-chakracore  
