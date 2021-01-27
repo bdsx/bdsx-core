@@ -9,7 +9,7 @@ It's the core for [bdsx](https://github.com/bdsx/bdsx)
 [NASM](https://www.nasm.us/) & Set PATH - required by node-chakracore  
 [Python2.x](https://www.python.org/downloads/release/python-2718/) & Set PATH - required by node-chakracore  
 
-1. Clone bdsx-core, elementminus, ken
+1. Clone bdsx-core, ken  
 **[parent directory]**  
 ├ ken (https://github.com/karikera/ken) - personal library project  
 └ bdsx-core (https://github.com/bdsx/bdsx-core)  
