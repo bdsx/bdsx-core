@@ -1,6 +1,6 @@
 ## BDSX-CORE
 ![logo](icon.png)  
-It's the core for [bdsx](https://github.com/karikera/bdsx)
+It's the core for [bdsx](https://github.com/bdsx/bdsx)
 
 ## Build It Self
 * Requirement
@@ -12,12 +12,11 @@ It's the core for [bdsx](https://github.com/karikera/bdsx)
 1. Clone bdsx-core, elementminus, ken
 **[parent directory]**  
 ├ ken (https://github.com/karikera/ken) - personal library project  
-├ elementminus (https://github.com/karikera/elementminus) - dll injecter for BDS  
-└ bdsx-core (https://github.com/karikera/bdsx-core)  
+└ bdsx-core (https://github.com/bdsx/bdsx-core)  
 
 2. Update git submodules.
 
 3. Build bdsx.sln with Visual Studio 2019.
 
 ## Release Build Outputs
-* [parent directory]/bdsx-core/release/bdsx-core.zip
+* [parent directory]/bdsx-core/release/bdsx-core-[version].zip
