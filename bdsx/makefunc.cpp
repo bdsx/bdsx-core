@@ -1837,6 +1837,9 @@ kr::JsValue getMakeFuncNamespace() noexcept
 	makefunc.setMethodRaw(u"np", functionToNative);
 	makefunc.setMethodRaw(u"js", functionFromNative);
 	makefunc.setMethod(u"js_old", functionFromNativeOld);
+	makefunc.setMethod(u"asJsValueRef", [](JsValue value) {
+		return VoidPointer::make(value.getRaw());
+		});
 	makefunc.set(u"js2np", s_field->js2np);
 	makefunc.set(u"np2js", s_field->np2js);
 	return makefunc;

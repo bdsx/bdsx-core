@@ -58,7 +58,7 @@ namespace
 
 	AText16 getStack(EXCEPTION_POINTERS* exptr) noexcept
 	{
-		PdbReader::setOptions(0);
+		PdbReader::setOptions(0x00000002);
 		AText16 stack;
 		for (int i = 0; i < 3; i++)
 		{

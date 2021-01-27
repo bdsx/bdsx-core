@@ -36,6 +36,10 @@ Text16 VoidPointer::getAddressBin() noexcept
 {
 	return Text16((char16_t*)&m_address, 4);
 }
+double VoidPointer::getAddressAsFloat() noexcept
+{
+	return (double)(intptr_t)m_address;
+}
 kr::JsValue VoidPointer::addressOfThis() noexcept
 {
 	JsValue ptr = NativePointer::newInstance();
@@ -153,6 +157,7 @@ void VoidPointer::initMethods(JsClassT<VoidPointer>* cls) noexcept
 	cls->setMethod(u"getAddressHigh", &VoidPointer::getAddressHigh);
 	cls->setMethod(u"getAddressLow", &VoidPointer::getAddressLow);
 	cls->setMethod(u"getAddressBin", &VoidPointer::getAddressBin);
+	cls->setMethod(u"getAddressAsFloat", &VoidPointer::getAddressAsFloat);
 	cls->setMethod(u"addressOfThis", &VoidPointer::addressOfThis);
 
 	cls->setMethod(u"equals", &VoidPointer::equals);

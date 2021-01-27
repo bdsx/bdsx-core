@@ -7,7 +7,7 @@
 #include "uv.h"
 #pragma warning(pop)
 
-#pragma comment(lib, "chakra.lib")
+#pragma comment(lib, "chakracore.lib")
 #pragma comment(lib, "cares.lib")
 #pragma comment(lib, "chakrashim.lib")
 #pragma comment(lib, "http_parser.lib")
@@ -134,6 +134,7 @@ void nodegate::loop(uint64_t hd_point) noexcept
         static_cast<Timer*>(timer)->done = true;
         uv_stop(uv_default_loop());
         }, duramilli, 0);
+    uv_work_t;
 
     for (;;)
     {
@@ -207,6 +208,7 @@ void AsyncTask::close() noexcept
         uv_close((uv_handle_t*)&s_processTask, nullptr);
     }
 }
+
 AsyncTask* AsyncTask::alloc(void (*cb)(AsyncTask*), size_t size) noexcept
 {
     AsyncTask* data = (AsyncTask*)malloc(size + sizeof(AsyncTask));

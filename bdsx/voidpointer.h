@@ -17,6 +17,7 @@ public:
 	int32_t getAddressLow() noexcept;
 	int32_t getAddressHigh() noexcept;
 	kr::Text16 getAddressBin() noexcept;
+	double getAddressAsFloat() noexcept;
 	kr::JsValue addressOfThis() noexcept;
 
 	bool equals(VoidPointer* other) noexcept;

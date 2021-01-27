@@ -67,6 +67,9 @@ public:
 	void setBin(kr::Text16 buffer, int offset) throws(kr::JsException);
 	kr::JsValue getBin64(int offset) throws(kr::JsException);
 
+	kr::JsValue getJsValueRef(int offset) throws(kr::JsException);
+	void setJsValueRef(kr::JsValue v, int offset) throws(kr::JsException);
+
 	kr::TText16 toString() noexcept;
 
 	static void initMethods(kr::JsClassT<StaticPointer>* cls) noexcept;

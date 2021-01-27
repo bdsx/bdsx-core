@@ -19,6 +19,7 @@ void NativePointer::initMethods(JsClassT<NativePointer>* cls) noexcept
 	cls->setMethod(u"setAddress", &NativePointer::setAddress);
 	cls->setMethod(u"setAddressBin", &NativePointer::setAddressBin);
 	cls->setMethod(u"setAddressFromBuffer", &NativePointer::setAddressFromBuffer);
+	cls->setMethod(u"setAddressWithFloat", &NativePointer::setAddressWithFloat);
 
 	cls->setMethod(u"readBoolean", &NativePointer::readBoolean);
 	cls->setMethod(u"readUint8", &NativePointer::readUint8);
@@ -58,12 +59,19 @@ void NativePointer::initMethods(JsClassT<NativePointer>* cls) noexcept
 	cls->setMethod(u"readVarString", &NativePointer::readVarString);
 	cls->setMethod(u"readBin", &NativePointer::readBin);
 	cls->setMethod(u"readBin64", &NativePointer::readBin64);
+	cls->setMethod(u"readVarUintAsFloat", &NativePointer::readVarUintAsFloat);
+	cls->setMethod(u"readVarIntAsFloat", &NativePointer::readVarIntAsFloat);
 
 	cls->setMethod(u"writeVarUint", &NativePointer::writeVarUint);
 	cls->setMethod(u"writeVarInt", &NativePointer::writeVarInt);
 	cls->setMethod(u"writeVarBin", &NativePointer::writeVarBin);
 	cls->setMethod(u"writeVarString", &NativePointer::writeVarString);
 	cls->setMethod(u"writeBin", &NativePointer::writeBin);
+	cls->setMethod(u"writeVarUintWithFloat", &NativePointer::writeVarUintWithFloat);
+	cls->setMethod(u"writeVarIntWithFloat", &NativePointer::writeVarIntWithFloat);
+
+	cls->setMethod(u"readJsValueRef", &NativePointer::readJsValueRef);
+	cls->setMethod(u"writeJsValueRef", &NativePointer::writeJsValueRef);
 }
 
 void NativePointer::move(int32_t lowBits, int32_t highBits) noexcept
@@ -87,6 +95,10 @@ void NativePointer::setAddressFromBuffer(JsValue buffer) throws(kr::JsException)
 void NativePointer::setAddressBin(Text16 text) throws(kr::JsException)
 {
 	m_address = (byte*)::getBin64(text);
+}
+void NativePointer::setAddressWithFloat(double value) throws(kr::JsException)
+{
+	m_address = (byte*)(int64_t)value;
 }
 
 bool NativePointer::readBoolean() throws(JsException)
@@ -454,6 +466,54 @@ JsValue NativePointer::readBin64() throws(kr::JsException)
 {
 	return readBin(4);
 }
+double NativePointer::readVarUintAsFloat() throws(kr::JsException)
+{
+	try
+	{
+		double value = 0;
+		double shift = 1.0;
+		for (;;) {
+			byte b = *m_address++;
+			value += (b & 0x7f) * shift;
+
+			if ((b & 0x80) == 0) {
+				return value;
+			}
+			shift *= 128.0;
+		}
+	}
+	catch (...)
+	{
+		accessViolation(m_address);
+	}
+}
+double NativePointer::readVarIntAsFloat() throws(kr::JsException)
+{
+	try
+	{
+		byte b = *m_address++;
+		bool minus = (b & 1) != 0;
+		double value = ((b & 0x7f) >> 1);
+		if ((b & 0x80) != 0)
+		{
+			double shift = 64.0;
+
+			for (;;) {
+				byte b = *m_address++;
+				value += (b & 0x7f) * shift;
+
+				if ((b & 0x80) == 0) break;
+				shift *= 128.0;
+			}
+		}
+		return minus ? -value - 1 : value;
+	}
+	catch (...)
+	{
+		accessViolation(m_address);
+	}
+}
+
 void NativePointer::writeVarUint(uint32_t value) throws(JsException)
 {
 	try
@@ -558,6 +618,58 @@ void NativePointer::writeBin(Text16 value) throws(kr::JsException)
 	{
 		accessViolation(m_address);
 	}
+}
+void NativePointer::writeVarUintWithFloat(double v) throws(kr::JsException)
+{
+	try
+	{
+		for (;;) {
+			if (v <= 0x7f) {
+				*m_address++ = (uint8_t)v | 0x80;
+			}
+			else {
+				*m_address++ = (uint8_t)v & 0x7f;
+				return;
+			}
+			v = floor(v / 128.0);
+		}
+	}
+	catch (...)
+	{
+		accessViolation(m_address);
+	}
+}
+void NativePointer::writeVarIntWithFloat(double v) throws(kr::JsException)
+{
+	if (v < 0) v = -v*2.0 - 1.0;
+	else v *= 2.0;
+
+	try
+	{
+		for (;;) {
+			if (v <= 0x7f) {
+				*m_address++ = (uint8_t)v | 0x80;
+			}
+			else {
+				*m_address++ = (uint8_t)v & 0x7f;
+				return;
+			}
+			v = floor(v / 128.0);
+		}
+	}
+	catch (...)
+	{
+		accessViolation(m_address);
+	}
+}
+
+JsValue NativePointer::readJsValueRef() throws(kr::JsException)
+{
+	return (JsRawData)_readas<JsValueRef>();
+}
+void NativePointer::writeJsValueRef(JsValue v) throws(kr::JsException)
+{
+	_writeas(v.getRaw());
 }
 
 template <typename T>

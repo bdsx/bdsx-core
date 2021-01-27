@@ -560,6 +560,15 @@ JsValue StaticPointer::interlockedCompareExchange64(kr::Text16 exchange, kr::Tex
 	}
 }
 
+JsValue StaticPointer::getJsValueRef(int offset) throws(kr::JsException)
+{
+	return (JsRawData)_getas<JsValueRef>(offset);
+}
+void StaticPointer::setJsValueRef(JsValue v, int offset) throws(kr::JsException)
+{
+	_setas(v.getRaw(), offset);
+}
+
 void StaticPointer::initMethods(JsClassT<StaticPointer>* cls) noexcept
 {
 	cls->setMethod(u"toString", &StaticPointer::toString);
@@ -610,6 +619,9 @@ void StaticPointer::initMethods(JsClassT<StaticPointer>* cls) noexcept
 	cls->setMethod(u"interlockedCompareExchange16", &StaticPointer::interlockedCompareExchange16);
 	cls->setMethod(u"interlockedCompareExchange32", &StaticPointer::interlockedCompareExchange32);
 	cls->setMethod(u"interlockedCompareExchange64", &StaticPointer::interlockedCompareExchange64);
+
+	cls->setMethod(u"getJsValueRef", &StaticPointer::getJsValueRef);
+	cls->setMethod(u"setJsValueRef", &StaticPointer::setJsValueRef);
 
 	cls->setMethod(u"setBin", &StaticPointer::setBin);
 	cls->setMethod(u"getBin", &StaticPointer::getBin);

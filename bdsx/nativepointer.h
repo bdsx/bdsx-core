@@ -17,6 +17,7 @@ public:
 	void setAddress(int32_t lowBits, int32_t highBits) noexcept;
 	void setAddressFromBuffer(kr::JsValue buffer) throws(kr::JsException);
 	void setAddressBin(kr::Text16 text) throws(kr::JsException);
+	void setAddressWithFloat(double value) throws(kr::JsException);
 
 	bool readBoolean() throws(kr::JsException);
 	uint8_t readUint8() throws(kr::JsException);
@@ -56,12 +57,19 @@ public:
 	kr::TText16 readVarString(int encoding) throws(kr::JsException);
 	kr::JsValue readBin(int words) throws(kr::JsException);
 	kr::JsValue readBin64() throws(kr::JsException);
+	double readVarUintAsFloat() throws(kr::JsException);
+	double readVarIntAsFloat() throws(kr::JsException);
 
 	void writeVarUint(uint32_t v) throws(kr::JsException);
 	void writeVarInt(int32_t v) throws(kr::JsException);
 	void writeVarBin(kr::Text16 v) throws(kr::JsException);
 	void writeVarString(kr::Text16 v, int encoding) throws(kr::JsException);
 	void writeBin(kr::Text16 value) throws(kr::JsException);
+	void writeVarUintWithFloat(double v) throws(kr::JsException);
+	void writeVarIntWithFloat(double v) throws(kr::JsException);
+
+	kr::JsValue readJsValueRef() throws(kr::JsException);
+	void writeJsValueRef(kr::JsValue v) throws(kr::JsException);
 
 	static void initMethods(kr::JsClassT<NativePointer>* cls) noexcept;
 

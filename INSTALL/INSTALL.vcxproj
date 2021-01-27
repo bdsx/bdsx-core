@@ -89,16 +89,13 @@
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">call %(identity) "$(OutDir)" "$(Configuration)" "$(SolutionDir)"</Command>
       <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">call %(identity) "$(OutDir)" "$(Configuration)" "$(SolutionDir)"</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)..\bdsx\bedrock_server\mods\bdsx.dll;$(SolutionDir)..\bdsx\bedrock_server\mods\bdsx.pdb;$(SolutionDir)..\bdsx\bedrock_server\ChakraCore.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.dll;$(SolutionDir)..\bdsx\bedrock_server\dbghelp.dll;%(Outputs)</Outputs>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)..\bdsx\bedrock_server\mods\bdsx.dll;$(SolutionDir)..\bdsx\bedrock_server\mods\bdsx.pdb;$(SolutionDir)..\bdsx\bedrock_server\ChakraCore.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.dll;$(SolutionDir)..\bdsx\bedrock_server\dbghelp.dll;%(Outputs)</Outputs>
-      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)bdsx.dll;$(OutDir)bdsx.pdb;$(OutDir)Chakra.dll;$(OutDir)ChakraCore.dll;$(ProjectDir)dbghelp.dll</AdditionalInputs>
-      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)bdsx.dll;$(OutDir)bdsx.pdb;$(OutDir)Chakra.dll;$(OutDir)ChakraCore.dll;$(ProjectDir)dbghelp.dll</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)..\bdsx\bedrock_server\ChakraCore.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.pdb;$(SolutionDir)..\bdsx\bedrock_server\dbghelp.dll;%(Outputs)</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)..\bdsx\bedrock_server\ChakraCore.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.pdb;$(SolutionDir)..\bdsx\bedrock_server\dbghelp.dll;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)Chakra.dll;$(OutDir)Chakra.pdb;$(OutDir)ChakraCore.dll;$(ProjectDir)dbghelp.dll</AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)Chakra.dll;$(OutDir)Chakra.pdb;$(OutDir)ChakraCore.dll;$(ProjectDir)dbghelp.dll</AdditionalInputs>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\elementminus\elementminus\elementminus.vcxproj">
-      <Project>{0f3e875d-4c92-4858-bb07-3c0fe8e74064}</Project>
-    </ProjectReference>
     <ProjectReference Include="..\bdsx\bdsx.vcxproj">
       <Project>{31964e2c-9e3d-4c98-a17b-589e322aa174}</Project>
     </ProjectReference>

@@ -35,8 +35,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "node-chakracore-build", "no
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "INSTALL", "INSTALL\INSTALL.vcxproj", "{8A86BAC7-1224-4273-B537-DBE065FCAC4D}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "elementminus", "..\elementminus\elementminus\elementminus.vcxproj", "{0F3E875D-4C92-4858-BB07-3C0FE8E74064}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -137,14 +135,6 @@ Global
 		{8A86BAC7-1224-4273-B537-DBE065FCAC4D}.Release|x64.ActiveCfg = Release|x64
 		{8A86BAC7-1224-4273-B537-DBE065FCAC4D}.Release|x64.Build.0 = Release|x64
 		{8A86BAC7-1224-4273-B537-DBE065FCAC4D}.Release|x86.ActiveCfg = Release|x64
-		{0F3E875D-4C92-4858-BB07-3C0FE8E74064}.Debug|x64.ActiveCfg = Debug|x64
-		{0F3E875D-4C92-4858-BB07-3C0FE8E74064}.Debug|x64.Build.0 = Debug|x64
-		{0F3E875D-4C92-4858-BB07-3C0FE8E74064}.Debug|x86.ActiveCfg = Debug|Win32
-		{0F3E875D-4C92-4858-BB07-3C0FE8E74064}.Debug|x86.Build.0 = Debug|Win32
-		{0F3E875D-4C92-4858-BB07-3C0FE8E74064}.Release|x64.ActiveCfg = Release|x64
-		{0F3E875D-4C92-4858-BB07-3C0FE8E74064}.Release|x64.Build.0 = Release|x64
-		{0F3E875D-4C92-4858-BB07-3C0FE8E74064}.Release|x86.ActiveCfg = Release|Win32
-		{0F3E875D-4C92-4858-BB07-3C0FE8E74064}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

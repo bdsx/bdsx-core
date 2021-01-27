@@ -2,15 +2,19 @@
 #include "cachedpdb.h"
 #include "nativepointer.h"
 #include "jsctx.h"
+#include "nodegate.h"
 
 #include <KR3/util/pdb.h>
 #include <KR3/data/set.h>
 #include <KRWin/handle.h>
 #include <KR3/data/crypt.h>
 
-CachedPdb g_pdb;
-
 using namespace kr;
+
+CachedPdb g_pdb;
+BText<32> g_md5;
+
+kr::BText16<kr::Path::MAX_LEN> CachedPdb::predefinedForCore;
 
 namespace
 {
@@ -40,6 +44,8 @@ namespace
 		throw JsException(tsz);
 	}
 
+	CriticalSection s_lock;
+
 	struct SymbolMaskInfo
 	{
 		uint32_t counter;
@@ -49,12 +55,24 @@ namespace
 	struct SymbolMap
 	{
 		Map<Text, SymbolMaskInfo, selfBuffered> targets;
-		io::FOStream<char, false, false> fos;
+		Keep<io::FOStream<char, false, false>> fos;
+		Keep<File> file;
 		byte* base;
 
-		SymbolMap() noexcept
+		SymbolMap(pcstr16 filepath) noexcept
 			:fos(nullptr)
 		{
+			base = (byte*)GetModuleHandleW(nullptr);
+			if (filepath != nullptr)
+			{
+				try
+				{
+					file = File::openRW(filepath);
+				}
+				catch (Error&)
+				{
+				}
+			}
 		}
 
 		void put(Text tx) noexcept
@@ -107,7 +125,7 @@ namespace
 			*nameWithIndex = *line;
 
 			*line << " = 0x" << hexf((byte*)address - base);
-			if (fos.base() != nullptr) fos << "\r\n" << *line;
+			if (fos != nullptr) *fos << "\r\n" << *line;
 			return true;
 		}
 
@@ -140,173 +158,167 @@ namespace
 				}
 			}
 		}
+
+		bool checkMd5(io::FIStream<char, false>& fis) noexcept
+		{
+			try
+			{
+				Text line = fis.readLine();
+				if (line != g_md5)
+				{
+					file->toBegin();
+					file->truncate();
+					throw EofException();
+				}
+			}
+			catch (EofException&)
+			{
+				fos = _new io::FOStream<char, false, false>(file);
+				*fos << g_md5;
+				return true;
+			}
+			return false;
+		}
 	};
 
 }
 
-File* openPredefinedFile(Text hash) throws(Error)
-{
-	TText16 bdsxPath = win::Module::byName(u"bdsx.dll")->fileName();
-	bdsxPath.cut_self(bdsxPath.find_r('\\') + 1);
-	bdsxPath << u"predefined";
-	File::createDirectory(bdsxPath.c_str());
-	bdsxPath << u'\\' << (Utf8ToUtf16)hash << u".ini";
-	return File::openRW(bdsxPath.c_str());
-}
-
 CachedPdb::CachedPdb() noexcept
 {
-	m_fail = false;
-	m_opened = false;
-
-	if (m_hash.empty())
-	{
-		try
-		{
-			TText16 moduleName = CurrentApplicationPath();
-			m_hash = (encoder::Hex)(TBuffer)encoder::Md5::hash(File::open(moduleName.data()));
-		}
-		catch (Error&)
-		{
-			cerr << "[BDSX] Cannot read bedrock_server.exe" << endl;
-			cerr << "[BDSX] Failed to get MD5" << endl;
-			return;
-		}
-	}
 }
 CachedPdb::~CachedPdb() noexcept
 {
 }
 
-Text CachedPdb::getMd5() noexcept
-{
-	return m_hash;
-}
-bool CachedPdb::open() noexcept
-{
-	m_fail = false;
-	m_opened = false;
-
-	if (!m_hash.empty() && m_predefinedFile == nullptr)
-	{
-		try
-		{
-			m_predefinedFile = openPredefinedFile(m_hash);
-		}
-		catch (Error&)
-		{
-			cout << "[BDSX] Cannot open the predefined.ini" << endl;
-			m_fail = true;
-			return false;
-		}
-	}
-	m_opened = true;
-	return true;
-}
 void CachedPdb::close() noexcept
 {
-	m_fail = false;
-	m_opened = false;
-	m_predefinedFile = nullptr;
-	m_pdb.close();
+	if (s_lock.tryEnter())
+	{
+		m_pdb.close();
+		s_lock.leave();
+	}
 }
-int CachedPdb::setOptions(int options) noexcept
+int CachedPdb::setOptions(int options) throws(JsException)
 {
-	return PdbReader::setOptions(options);
+	if (!s_lock.tryEnter()) throw JsException(u"BUSY. It's using by async task");
+	int out = PdbReader::setOptions(options);
+	s_lock.leave();
+	return out;
 }
-int CachedPdb::getOptions() noexcept
+int CachedPdb::getOptions() throws(JsException)
 {
-	return PdbReader::getOptions();
+	if (!s_lock.tryEnter()) throw JsException(u"BUSY. It's using by async task");
+	int out = PdbReader::getOptions();
+	s_lock.leave();
+	return out;
 }
 
-void CachedPdb::getProcAddresses(View<Text> text, void(*cb)(Text name, void* fnptr)) noexcept
+bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text> text, Callback cb, void* param, bool quiet) noexcept
 {
-	_assert(m_opened);
-
-	SymbolMap<true> targets;
-	targets.base = (byte*)GetModuleHandleW(nullptr);
+	CsLock __lock = s_lock;
+	SymbolMap<true> targets(predefined);
 
 	for (Text tx : text)
 	{
 		targets.put(tx);
 	}
 
-	if (m_predefinedFile != nullptr)
+	if (predefined != nullptr)
 	{
+		if (targets.file == nullptr)
+		{
+			if (!quiet) cout << "[BDSX] Failed to open " << (Utf16ToAnsi)(Text16)predefined << endl;
+			return false;
+		}
+
 		try
 		{
-			m_predefinedFile->setPointer(0);
-			io::FIStream<char, false> fis = (File*)m_predefinedFile;
-
-			for (;;)
+			Must<io::FIStream<char, false>> fis = _new io::FIStream<char, false>((File*)targets.file);
+			if (targets.checkMd5(*fis))
 			{
-				Text name;
-				uintptr_t offset = targets.readOffset(fis, &name);
-				cb(name, targets.base + offset);
+				if (!quiet) cout << "[BDSX] Generating " << (Utf16ToAnsi)(Text16)predefined << endl;
+			}
+			else
+			{
+				for (;;)
+				{
+					Text name;
+					uintptr_t offset = targets.readOffset(*fis, &name);
+					cb(name, targets.base + offset, param);
+				}
 			}
 		}
 		catch (EofException&)
 		{
 		}
-		if (targets.empty()) return;
+		if (targets.empty()) return true;
 	}
 
 	// load from pdb
 	try
 	{
-		cout << "[BDSX] PdbReader: Search Symbols..." << endl;
+		if (!quiet) cout << "[BDSX] PdbReader: Search Symbols..." << endl;
 		if (m_pdb.base() == nullptr)
 		{
 			m_pdb.load();
 		}
 
-		if (m_predefinedFile != nullptr) m_predefinedFile->movePointerToEnd(0);
-
 		struct Local
 		{
 			SymbolMap<true>& targets;
-			void(*cb)(Text name, void* fnptr);
-		} local = { targets, cb };
-		targets.fos.resetStream(m_predefinedFile);
+			void(*cb)(Text name, void* fnptr, void* param);
+			void* param;
+			bool quiet;
+		} local = { targets, cb, param, quiet };
+
+		if (targets.file != nullptr && targets.fos == nullptr) targets.fos = _new io::FOStream<char, false, false>(targets.file);
 
 		m_pdb.search(nullptr, [&local](Text name, void* address, uint32_t typeId) {
 			TText line;
 			Text nameWithIndex;
 			if (!local.targets.test(name, address, &line, &nameWithIndex)) return true;
 
-			cout << line << endl;
-			local.cb(nameWithIndex, address);
+			if (!local.quiet) cout << line << endl;
+			local.cb(nameWithIndex, address, local.param);
 			return !local.targets.empty();
 			});
-		if (targets.fos.base() != nullptr) targets.fos.flush();
+		if (targets.fos != nullptr) targets.fos->flush();
 	}
 	catch (FunctionError& err)
 	{
-		cerr << err.getFunctionName() << ": failed, ";
+		if (!quiet)
 		{
-			TSZ tsz;
-			err.getMessageTo(&tsz);
-			cerr << tsz;
+			cerr << err.getFunctionName() << ": failed, ";
+			{
+				TSZ tsz;
+				err.getMessageTo(&tsz);
+				cerr << tsz;
+			}
+			cerr << "(0x" << hexf(err.getErrorCode(), 8) << ')' << endl;
 		}
-		cerr << "(0x" << hexf(err.getErrorCode(), 8) << ')' << endl;
 	}
 
 	if (!targets.empty())
 	{
-		for (auto& item : targets.targets)
+		if (!quiet)
 		{
-			Text name = item.first;
-			cerr << name << " not found" << endl;
+			for (auto& item : targets.targets)
+			{
+				Text name = item.first;
+				cerr << name << " not found" << endl;
+			}
 		}
+		return false;
 	}
+
+	return true;
 }
-
-JsValue CachedPdb::getProcAddresses(JsValue out, JsValue array, bool quiet) throws(kr::JsException)
+JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue array, bool quiet) throws(kr::JsException)
 {
-	if (!m_opened) throw JsException(u"PDB is closed");
+	if (!s_lock.tryEnter()) throw JsException(u"BUSY. It's using by async task");
+	finally { s_lock.leave(); };
 
-	SymbolMap<false> targets;
-	targets.base = (byte*)GetModuleHandleW(nullptr);
+	SymbolMap<false> targets(predefined);
 
 	int length = array.getArrayLength();
 	for (int i = 0; i < length; i++)
@@ -314,19 +326,29 @@ JsValue CachedPdb::getProcAddresses(JsValue out, JsValue array, bool quiet) thro
 		targets.put(array.get(i).cast<TText>());
 	}
 
-	if (m_predefinedFile != nullptr)
+	if (predefined != nullptr)
 	{
+		if (targets.file == nullptr)
+		{
+			throw JsException(TSZ16() << u"Failed to open " << predefined);
+		}
 		try
 		{
-			m_predefinedFile->setPointer(0);
-			io::FIStream<char, false> fis = (File*)m_predefinedFile;
-			for (;;)
+			Must<io::FIStream<char, false>> fis = _new io::FIStream<char, false>((File*)targets.file);
+			if (targets.checkMd5(*fis))
 			{
-				Text name;
-				uintptr_t offset = targets.readOffset(fis, &name);
-				NativePointer* ptr = NativePointer::newInstance();
-				ptr->setAddressRaw(targets.base + offset);
-				out.set(name, ptr);
+				if (!quiet) g_ctx->log(TSZ16() << u"[BDSX] Generating " << predefined);
+			}
+			else
+			{
+				for (;;)
+				{
+					Text name;
+					uintptr_t offset = targets.readOffset(*fis, &name);
+					NativePointer* ptr = NativePointer::newInstance();
+					ptr->setAddressRaw(targets.base + offset);
+					out.set(name, ptr);
+				}
 			}
 		}
 		catch (EofException&)
@@ -343,9 +365,7 @@ JsValue CachedPdb::getProcAddresses(JsValue out, JsValue array, bool quiet) thro
 		{
 			m_pdb.load();
 		}
-
-		if (m_predefinedFile != nullptr) m_predefinedFile->movePointerToEnd(0);
-		
+				
 		struct Local
 		{
 			SymbolMap<false>& targets;
@@ -353,7 +373,7 @@ JsValue CachedPdb::getProcAddresses(JsValue out, JsValue array, bool quiet) thro
 			JsValue& out;
 		} local = {targets, quiet, out };
 
-		targets.fos.resetStream(m_predefinedFile);
+		if (targets.file != nullptr && targets.fos == nullptr) targets.fos = _new io::FOStream<char, false, false>(targets.file);
 
 		m_pdb.search(nullptr, [&local](Text name, void* address, uint32_t typeId) {
 			TText line;
@@ -372,7 +392,7 @@ JsValue CachedPdb::getProcAddresses(JsValue out, JsValue array, bool quiet) thro
 			local.out.set(JsValue(nameWithIndex), ptr);
 			return !local.targets.empty();
 			});
-		if (targets.fos.base() != nullptr) targets.fos.flush();
+		if (targets.fos != nullptr) targets.fos->flush();
 	}
 	catch (FunctionError& err)
 	{
@@ -393,8 +413,6 @@ JsValue CachedPdb::getProcAddresses(JsValue out, JsValue array, bool quiet) thro
 
 void CachedPdb::search(JsValue masks, JsValue cb) throws(kr::JsException)
 {
-	if (!m_opened) throw JsException(u"PDB is closed");
-
 	try
 	{
 		if (m_pdb.base() == nullptr)
@@ -525,12 +543,57 @@ JsValue CachedPdb::getAll(JsValue onprogress) throws(kr::JsException)
 JsValue getPdbNamespace() noexcept
 {
 	JsValue pdb = JsNewObject;
-	pdb.setMethod(u"open", [] { return g_pdb.open(); });
+	pdb.set(u"coreCachePath", (Text16)CachedPdb::predefinedForCore);
+	pdb.setMethod(u"open", [] {});
 	pdb.setMethod(u"close", [] { return g_pdb.close(); });
 	pdb.setMethod(u"setOptions", [](int options) { return g_pdb.setOptions(options); });
 	pdb.setMethod(u"getOptions", []() { return g_pdb.getOptions(); });
 	pdb.setMethod(u"search", [](JsValue masks, JsValue cb) { return g_pdb.search(masks, cb); });
-	pdb.setMethod(u"getProcAddresses", [](JsValue out, JsValue array, bool quiet) { return g_pdb.getProcAddresses(out, array, quiet); });
+	pdb.setMethod(u"getProcAddresses", [](JsValue out, JsValue array, bool quiet) { return g_pdb.getProcAddresses(CachedPdb::predefinedForCore.data(), out, array, quiet); });
+
+	JsValue getList = JsFunction::makeT([](Text16 predefined, JsValue out, JsValue array, bool quiet) { 
+		return g_pdb.getProcAddresses(predefined.data(), out, array, quiet); 
+		});
+	// should I do this?
+	//getList.setMethod(u"async", [](Text16 predefined, JsValue out, JsValue array, bool quiet) { 
+
+	//	Array<Text> list;
+
+	//	AText buffer;
+	//	buffer.reserve(1024);
+
+	//	int32_t len = array.getArrayLength();
+	//	for (int i = 0; i < len; i++)
+	//	{
+	//		size_t front = buffer.size();
+	//		buffer << (Utf16ToUtf8)array.get(i).cast<Text16>();
+	//		size_t back = buffer.size();
+	//		buffer << '\0';
+
+	//		list.push(Text((pcstr)front, (pcstr)back));
+	//	}
+
+	//	ThreadHandle::createLambda([predefined = AText16::concat(predefined, nullterm), quiet, buffer = move(buffer), list = move(list)]() mutable{
+	//		intptr_t off = (intptr_t)buffer.data();
+	//		for (Text& v : list)
+	//		{
+	//			v.addBegin(off);
+	//			v.addEnd(off);
+	//		}
+	//		struct Local
+	//		{
+	//			AText out;
+	//		} local;
+	//		local.out.reserve(1024);
+	//		g_pdb.getProcAddressesT<Local>(predefined.data(), list, [](Text name, void* fnptr, Local* param) {
+
+	//			}, &local, quiet);
+	//		AsyncTask::post([predefined = move(predefined), quiet, buffer = move(buffer), list = move(list)]() mutable{
+
+	//		});
+	//		});
+	//	});
+	pdb.set(u"getList", getList);
 	pdb.setMethod(u"getAll", [](JsValue onprogress) { return g_pdb.getAll(onprogress); });
 	return pdb;
 }
