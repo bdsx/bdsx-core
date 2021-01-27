@@ -1,5 +1,3 @@
-[EN](README.md)|[KR](README.ko.md)
-
 ## BDSX-CORE
 ![logo](icon.png)  
 It's the core for [bdsx](https://github.com/karikera/bdsx)
