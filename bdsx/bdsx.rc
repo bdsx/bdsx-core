@@ -72,9 +72,9 @@ BEGIN
             VALUE "CompanyName", "rua.kr"
             VALUE "FileDescription", "BDSX Core"
             VALUE "FileVersion", BDSX_CORE_VERSION
-            VALUE "InternalName", "bdsx.dll"
+            VALUE "InternalName", "Chakra.dll"
             VALUE "LegalCopyright", "Copyright (C) 2019"
-            VALUE "OriginalFilename", "bdsx.dll"
+            VALUE "OriginalFilename", "Chakra.dll"
             VALUE "ProductName", "BDSX Core"
             VALUE "ProductVersion", BDSX_CORE_VERSION
         END
