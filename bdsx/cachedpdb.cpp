@@ -134,11 +134,11 @@ namespace
 			return targets.empty();
 		}
 
-		uintptr_t readOffset(io::FIStream<char, false>& fis, Text* name) throws(EofException)
+		uintptr_t readOffset(io::FIStream<char, false>* fis, Text* name) throws(EofException)
 		{
 			for (;;)
 			{
-				Text line = fis.readLine();
+				Text line = fis->readLine();
 
 				pcstr equal = line.find_r('=');
 				if (equal == nullptr) continue;
@@ -159,11 +159,11 @@ namespace
 			}
 		}
 
-		bool checkMd5(io::FIStream<char, false>& fis) noexcept
+		bool checkMd5(io::FIStream<char, false>* fis) noexcept
 		{
 			try
 			{
-				Text line = fis.readLine();
+				Text line = fis->readLine();
 				if (line != g_md5)
 				{
 					file->toBegin();
@@ -178,6 +178,29 @@ namespace
 				return true;
 			}
 			return false;
+		}
+	};
+
+	struct __StreamWithPad
+	{
+		void* padForAntiCorruptingByVisualStudioBug; // https://developercommunity2.visualstudio.com/t/An-invalid-handle-was-specified-a-weird/1322604
+		io::FIStream<char, false>* const fis;
+
+		__StreamWithPad(io::FIStream<char, false>* fis) noexcept
+			:fis(fis)
+		{
+		}
+		~__StreamWithPad() noexcept
+		{
+			delete fis;
+		}
+		operator io::FIStream<char, false>*() noexcept
+		{
+			return fis;
+		}
+		io::FIStream<char, false>* operator ->() noexcept
+		{
+			return fis;
 		}
 	};
 
@@ -215,6 +238,8 @@ int CachedPdb::getOptions() throws(JsException)
 
 bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text> text, Callback cb, void* param, bool quiet) noexcept
 {
+	if (text.empty()) return true;
+
 	CsLock __lock = s_lock;
 	SymbolMap<true> targets(predefined);
 
@@ -233,8 +258,8 @@ bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text> text, Callback c
 
 		try
 		{
-			Must<io::FIStream<char, false>> fis = _new io::FIStream<char, false>((File*)targets.file);
-			if (targets.checkMd5(*fis))
+			__StreamWithPad fis = _new io::FIStream<char, false>((File*)targets.file);
+			if (targets.checkMd5(fis))
 			{
 				if (!quiet) cout << "[BDSX] Generating " << (Utf16ToAnsi)(Text16)predefined << endl;
 			}
@@ -243,8 +268,9 @@ bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text> text, Callback c
 				for (;;)
 				{
 					Text name;
-					uintptr_t offset = targets.readOffset(*fis, &name);
+					uintptr_t offset = targets.readOffset(fis, &name);
 					cb(name, targets.base + offset, param);
+					// if (targets.empty()) return true;
 				}
 			}
 		}
@@ -315,12 +341,14 @@ bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text> text, Callback c
 }
 JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue array, bool quiet) throws(kr::JsException)
 {
+	int length = array.getArrayLength();
+	if (length == 0) return out;
+
 	if (!s_lock.tryEnter()) throw JsException(u"BUSY. It's using by async task");
 	finally { s_lock.leave(); };
 
 	SymbolMap<false> targets(predefined);
 
-	int length = array.getArrayLength();
 	for (int i = 0; i < length; i++)
 	{
 		targets.put(array.get(i).cast<TText>());
@@ -335,7 +363,8 @@ JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue arr
 		try
 		{
 			Must<io::FIStream<char, false>> fis = _new io::FIStream<char, false>((File*)targets.file);
-			if (targets.checkMd5(*fis))
+
+			if (targets.checkMd5(fis))
 			{
 				if (!quiet) g_ctx->log(TSZ16() << u"[BDSX] Generating " << predefined);
 			}
@@ -344,17 +373,17 @@ JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue arr
 				for (;;)
 				{
 					Text name;
-					uintptr_t offset = targets.readOffset(*fis, &name);
+					uintptr_t offset = targets.readOffset(fis, &name);
 					NativePointer* ptr = NativePointer::newInstance();
 					ptr->setAddressRaw(targets.base + offset);
 					out.set(name, ptr);
+					if (targets.empty()) return out;
 				}
 			}
 		}
 		catch (EofException&)
 		{
 		}
-		if (targets.empty()) return out;
 	}
 
 	// load from pdb

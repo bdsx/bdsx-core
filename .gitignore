@@ -8,5 +8,7 @@ bin
 /release/bdsx
 /docker
 /bdsx-example/discord.bot.token.txt
-/packages
 /node-chakracore-build/x64
+/packages/*/*
+!/packages/*/build
+/packages/*/build/native/include

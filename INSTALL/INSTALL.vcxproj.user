@@ -12,4 +12,10 @@
     <LocalDebuggerCommandArguments>$(SolutionDir)..\bdsx</LocalDebuggerCommandArguments>
     <LocalDebuggerWorkingDirectory>$(SolutionDir)..\bdsx\bedrock_server</LocalDebuggerWorkingDirectory>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">
+    <LocalDebuggerCommand>$(SolutionDir)..\bdsx\bedrock_server\bedrock_server.exe</LocalDebuggerCommand>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+    <LocalDebuggerCommandArguments>$(SolutionDir)..\bdsx</LocalDebuggerCommandArguments>
+    <LocalDebuggerWorkingDirectory>$(SolutionDir)..\bdsx\bedrock_server</LocalDebuggerWorkingDirectory>
+  </PropertyGroup>
 </Project>

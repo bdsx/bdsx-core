@@ -1457,11 +1457,12 @@ namespace
 
 JsValue functionFromNative(const JsArguments& args) throws(JsException, JsValue)
 {
+	ParamInfoMaker pimaker(args); // check param count also
+
 	VoidPointer* targetfuncptr;
 	JsValue targetfuncjs = args[0];
+	if (targetfuncjs.abstractEquals((JsValue)nullptr)) throwTypeError(1, u"type", getNameFromType(targetfuncjs.getType()), u"*Pointer or [number, number] required");
 	JsValue vfoff = targetfuncjs.get(0);
-
-	ParamInfoMaker pimaker(args);
 	
 	// JsValueRef( * JsNativeFunction)(JsValueRef callee, bool isConstructCall, JsValueRef *arguments, unsigned short argumentCount, void *callbackState);
 
@@ -1640,7 +1641,7 @@ JsValue functionFromNative(const JsArguments& args) throws(JsException, JsValue)
 }
 JsValue functionToNative(const JsArguments& args) throws(JsException, JsValue)
 {
-	ParamInfoMaker pimaker(args);
+	ParamInfoMaker pimaker(args); // check param count also
 
 	JsValue jsfunc = args[0];
 	JsAddRef(jsfunc.getRaw(), nullptr);
