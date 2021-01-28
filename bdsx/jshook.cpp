@@ -1,9 +1,9 @@
 #include "stdafx.h"
 #include "jshook.h"
-
-#include "iatdll.h"
 #include "jsctx.h"
 
+#include <KRWin/hook.h>
+#include <KRWin/handle.h>
 #include <KR3/util/wide.h>
 #include <KR3/parser/jsonparser.h>
 
@@ -171,16 +171,17 @@ namespace
 	{
 		s_field->onError = onError;
 
-		g_iat.chakra.hooking("JsCreateContext", JsCreateContextHook);
-		g_iat.chakra.hooking("JsSetCurrentContext", JsSetCurrentContextHook);
-		g_iat.chakra.hooking("JsCreateRuntime", JsCreateRuntimeHook);
-		g_iat.chakra.hooking("JsDisposeRuntime", JsDisposeRuntimeHook);
-		g_iat.chakra.hooking("JsRunScript", JsRunScriptHook);
-		g_iat.chakra.hooking("JsCallFunction", JsCallFunctionHook);
-		g_iat.chakra.hooking("JsStartDebugging", JsStartDebuggingHook);
-		g_iat.chakra.hooking("JsSetPromiseContinuationCallback", JsSetPromiseContinuationCallbackHook);
+		kr::hook::IATModule chakra(win::Module::current(), "chakra.dll");
+		chakra.hooking("JsCreateContext", JsCreateContextHook);
+		chakra.hooking("JsSetCurrentContext", JsSetCurrentContextHook);
+		chakra.hooking("JsCreateRuntime", JsCreateRuntimeHook);
+		chakra.hooking("JsDisposeRuntime", JsDisposeRuntimeHook);
+		chakra.hooking("JsRunScript", JsRunScriptHook);
+		chakra.hooking("JsCallFunction", JsCallFunctionHook);
+		chakra.hooking("JsStartDebugging", JsStartDebuggingHook);
+		chakra.hooking("JsSetPromiseContinuationCallback", JsSetPromiseContinuationCallbackHook);
 	#ifndef NDEBUG
-		g_iat.chakra.hooking("JsSetProperty", JsSetPropertyHook);
+		chakra.hooking("JsSetProperty", JsSetPropertyHook);
 	#endif
 	}
 

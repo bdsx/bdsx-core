@@ -8,6 +8,7 @@
 #include <KR3/mt/criticalsection.h>
 #include <KR3/util/StackWalker.h>
 #include <KR3/util/pdb.h>
+#include <KRWin/handle.h>
 
 using namespace kr;
 
@@ -110,19 +111,51 @@ kr::Text16 runtimeError::codeToString(unsigned int errorCode) noexcept
 
 int runtimeError::raise(EXCEPTION_POINTERS* exptr) noexcept
 {
-	ondebug(requestDebugger());
-	debug();
+	static DWORD raising = 0;
+	if (raising != 0) Sleep(INFINITE);
+	DWORD threadId = raising = GetCurrentThreadId();
+
+#ifndef NDEBUG
+	{
+		DWORD64 rip = exptr->ContextRecord->Rip;
+		unsigned int code = exptr->ExceptionRecord->ExceptionCode;
+		cout << "ExceptionCode: " << hexf(code, 8) << endl;
+		cout << "Thread Id: " << threadId << endl;
+		cout << "rip: 0x" << hexf(rip, 16) << endl;
+
+		MEMORY_BASIC_INFORMATION mbi;
+		if (VirtualQuery((void*)(uintptr_t)rip, &mbi, sizeof(mbi)))
+		{
+			win::Module* mod = (win::Module*)mbi.AllocationBase;
+			
+			TSZ16 filename;
+			filename << mod->fileName();
+			Text16 basename = path16.basename(filename);
+			if (!basename.empty())
+			{
+				cout << "rip RVA: " << (Utf16ToUtf8)basename << "+0x" << hexf(rip - (uintptr_t)mod) << endl;
+			}
+			else
+			{
+
+				cout << "rip RVA: [0x" << hexf((uintptr_t)mod) << "]+0x" << hexf(rip - (uintptr_t)mod) << endl;
+			}
+		}
+	}
+
+	if (requestDebugger())
+	{
+		debug();
+	}
+#endif
 	
 
 	for (;;)
 	{
-		DWORD threadId;
 		try
 		{
 			if (s_nativeErrorCode != 0) break;
-
 			unsigned int code = exptr->ExceptionRecord->ExceptionCode;
-			threadId = GetCurrentThreadId();
 
 			AText16 stack = getStack(exptr);
 			if (stack.endsWith('\n')) stack.pop();
@@ -135,8 +168,6 @@ int runtimeError::raise(EXCEPTION_POINTERS* exptr) noexcept
 		}
 		catch (...)
 		{
-			threadId = GetCurrentThreadId();
-
 			CsLock lock = s_stackLock;
 			s_nativeErrorCode = -1;
 			s_nativeExceptionStack = u"[[setRuntimeException, Invalid EXCEPTION_POINTERS]]";

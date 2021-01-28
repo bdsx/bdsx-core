@@ -1,12 +1,13 @@
 #include "stdafx.h"
 #include "netfilter.h"
 
-#include "iatdll.h"
 #include "nodegate.h"
 #include "jsctx.h"
 
 #include <WinSock2.h>
 
+#include <KRWin/hook.h>
+#include <KRWin/handle.h>
 #include <KR3/data/set.h>
 #include <KR3/mt/criticalsection.h>
 #include <KR3/win/windows.h>
@@ -279,11 +280,12 @@ void NetFilter::init(JsValue callbackOnExceeded) noexcept
 {
 	s_field->callbackOnExceeded = callbackOnExceeded;
 
-	g_iat.ws2_32.hooking(2, bindHook);
-	g_iat.ws2_32.hooking(3, closesocketHook);
-	g_iat.ws2_32.hooking(17, recvfromHook);
-	g_iat.ws2_32.hooking(20, sendtoHook);
-	g_iat.ws2_32.hooking(116, WSACleanupHook);
+	hook::IATModule ws2_32(win::Module::current(), "WS2_32.dll");
+	ws2_32.hooking(2, bindHook);
+	ws2_32.hooking(3, closesocketHook);
+	ws2_32.hooking(17, recvfromHook);
+	ws2_32.hooking(20, sendtoHook);
+	ws2_32.hooking(116, WSACleanupHook);
 }
 
 bool NetFilter::addFilter(kr::Ipv4Address ip, time_t endTime) noexcept

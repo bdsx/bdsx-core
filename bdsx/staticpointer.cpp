@@ -327,7 +327,7 @@ void StaticPointer::setPointer(VoidPointer* v, int offset) throws(JsException)
 {
 	return _setas(v != nullptr ? v->getAddressRaw() : nullptr, offset);
 }
-void StaticPointer::setString(JsValue buffer, int offset, int encoding) throws(JsException)
+int StaticPointer::setString(JsValue buffer, int offset, int encoding) throws(JsException)
 {
 	if (encoding == ExEncoding::UTF16)
 	{
@@ -335,8 +335,9 @@ void StaticPointer::setString(JsValue buffer, int offset, int encoding) throws(J
 		pstr16 str = (pstr16)(m_address + offset);
 		try
 		{
-			size_t size = text.size();
-			memcpy(str, text.data(), size);
+			size_t bytes = text.bytes();
+			memcpy(str, text.data(), bytes + sizeof(char16_t));
+			return (int)bytes;
 		}
 		catch (...)
 		{
@@ -345,12 +346,25 @@ void StaticPointer::setString(JsValue buffer, int offset, int encoding) throws(J
 	}
 	else if (encoding == ExEncoding::BUFFER)
 	{
-		setBuffer(buffer, offset);
+		void* p = m_address + offset;
+		Buffer buf = buffer.getBuffer();
+		if (buf == nullptr) throw JsException(u"argument must be buffer");
+		try
+		{
+			size_t size = buf.size();
+			memcpy(p, buf.data(), size);
+			((char*)p)[size] = '\0';
+			return (int)size;
+		}
+		catch (...)
+		{
+			accessViolation(p);
+		}
 	}
 	else
 	{
 		Text16 text = buffer.cast<Text16>();
-		pstr16 str = (pstr16)(m_address + offset);
+		pstr str = (pstr)(m_address + offset);
 		try
 		{
 			TSZ mb;
@@ -360,8 +374,9 @@ void StaticPointer::setString(JsValue buffer, int offset, int encoding) throws(J
 			);
 
 			size_t size = mb.size();
-			memcpy(m_address, mb.data(), size);
-			m_address += size;
+			memcpy(str, mb.data(), size);
+			str[size] = '\0';
+			return (int)size;
 		}
 		catch (...)
 		{

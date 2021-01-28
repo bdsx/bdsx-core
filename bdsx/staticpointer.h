@@ -46,7 +46,7 @@ public:
 	void setFloat32(float v, int offset) throws(kr::JsException);
 	void setFloat64(double v, int offset) throws(kr::JsException);
 	void setPointer(VoidPointer* v, int offset) throws(kr::JsException);
-	void setString(kr::JsValue buffer, int offset, int encoding) throws(kr::JsException);
+	int setString(kr::JsValue buffer, int offset, int encoding) throws(kr::JsException);
 	void setBuffer(kr::JsValue buffer, int offset) throws(kr::JsException);
 	void setCxxString(kr::Text16 text, int offset, int encoding) throws(kr::JsException);
 

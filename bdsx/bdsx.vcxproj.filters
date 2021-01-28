@@ -7,7 +7,6 @@
     <ClCompile Include="encoding.cpp" />
     <ClCompile Include="nodegate.cpp" />
     <ClCompile Include="stdafx.cpp" />
-    <ClCompile Include="iatdll.cpp" />
     <ClCompile Include="netfilter.cpp" />
     <ClCompile Include="makefunc.cpp" />
     <ClCompile Include="jshook.cpp" />
@@ -27,7 +26,6 @@
     <ClInclude Include="encoding.h" />
     <ClInclude Include="nodegate.h" />
     <ClInclude Include="stdafx.h" />
-    <ClInclude Include="iatdll.h" />
     <ClInclude Include="netfilter.h" />
     <ClInclude Include="makefunc.h" />
     <ClInclude Include="jshook.h" />
