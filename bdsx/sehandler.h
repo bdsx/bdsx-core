@@ -7,7 +7,7 @@ namespace runtimeError
 {
 	int raise(EXCEPTION_POINTERS* exptr) noexcept;
 	void setHandler(kr::JsValue listener) noexcept;
-	ATTR_NORETURN void fire(kr::JsValue error) noexcept;
+	ATTR_NORETURN void fire(JsValueRef error) noexcept;
 
 	kr::Text16 codeToString(unsigned int errorCode) noexcept;
 	SehHandler* beginHandler() noexcept;

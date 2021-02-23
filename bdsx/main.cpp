@@ -6,7 +6,6 @@
 #include "staticpointer.h"
 #include "nativepointer.h"
 #include "structurepointer.h"
-#include "makefunc.h"
 #include "cachedpdb.h"
 #include "sehandler.h"
 #include "jsctx.h"
@@ -24,6 +23,9 @@
 
 #include <shellapi.h>
 #include <DbgHelp.h>
+
+#define USE_EDGEMODE_JSRT
+#include <jsrt.h>
 
 #undef main
 
@@ -64,9 +66,6 @@ Initializer<Socket> __init;
 
 int nodeStart(int argc, char** argv) noexcept
 {
-	size_t a = 0;
-	uint32_t v = (uint32_t)((a >> 32) ^ a);
-
 	__try
 	{
 		return nodegate::start(argc, argv);
@@ -189,9 +188,9 @@ BOOL WINAPI DllMain(
 
 namespace
 {
-	void tester(void* sharedptr, int value) noexcept
+	float tester(double a, float b, int64_t c) noexcept
 	{
-		int a = 0;
+		return (float)a;
 	}
 
 	void trycatch(void* param, void(*func)(void*), void(*_catch)(void*, pcstr)) noexcept
@@ -242,7 +241,84 @@ namespace
 	{
 		throw str;
 	}
+	void throwJsErrorCode(JsErrorCode err) throws(kr::JsException)
+	{
+		throw kr::JsException(kr::TSZ16() << u"JsErrorCode: 0x" << kr::hexf((int)err));
+	}
+
+	namespace stackutil
+	{
+		uintptr_t last_allocate = 1;
+		void* stack_alloc(size_t size) noexcept
+		{
+			StackAllocator* alloc = StackAllocator::getInstance();
+			void* p = alloc->allocate(8 + size);
+			*(uintptr_t*)p = last_allocate;
+			last_allocate = (uintptr_t)p;
+			return (byte*)p + 8;
+		}
+		void stack_free_all() noexcept
+		{
+			uintptr_t p = last_allocate;
+			if (p & 1) return;
+
+			StackAllocator* alloc = StackAllocator::getInstance();
+			for (;;)
+			{
+				void* orip = (void*)(p & ~1);
+				p = *(uintptr_t*)orip;
+				alloc->free(orip);
+				if (p & 1)
+				{
+					last_allocate = p;
+					break;
+				}
+			}
+		}
+
+		char* to_ansi(const char16_t* str, size_t size) noexcept
+		{
+			Utf16ToAnsi dec = Text16(str, size);
+			size_t outsize = dec.size();
+			char* out = (char*)stack_alloc(outsize + 1);
+			dec.copyTo(out);
+			out[outsize] = '\0';
+			return out;
+		}
+
+		char* to_utf8(const char16_t* str, size_t size) noexcept
+		{
+			Utf16ToUtf8 dec = Text16(str, size);
+			size_t outsize = dec.size();
+			char* out = (char*)stack_alloc(outsize + 1);
+			dec.copyTo(out);
+			out[outsize] = '\0';
+
+			return out;
+		}
+
+		void* pointer_js2class(JsValueRef value) noexcept
+		{
+			return JsValue((JsRawData)value).getNativeObject<VoidPointer>();
+		}
+
+		JsErrorCode from_ansi(pcstr str, JsValueRef* out) noexcept
+		{
+			TSZ16 buf;
+			buf << (AnsiToUtf16)(Text)str;
+			return JsPointerToString(wide(buf.data()), buf.size(), out);
+		}
+
+		JsErrorCode from_utf8(pcstr str, JsValueRef* out) noexcept
+		{
+			TSZ16 buf;
+			buf << (Utf8ToUtf16)(Text)str;
+			return JsPointerToString(wide(buf.data()), buf.size(), out);
+		}
+
+	}
 }
+
 
 void nodegate::initNativeModule(void* exports_raw) noexcept
 {
@@ -275,23 +351,73 @@ void nodegate::initNativeModule(void* exports_raw) noexcept
 			exports.set(u"cgate", cgate);
 
 			cgate.set(u"bdsxCoreVersion", CONCAT(u, BDSX_CORE_VERSION));
-			cgate.set(u"GetProcAddress", VoidPointer::make(GetProcAddress));
-			cgate.set(u"GetModuleHandleW", VoidPointer::make(GetModuleHandleW));
+			cgate.set(u"GetProcAddressPtr", VoidPointer::make(GetProcAddress));
+			cgate.setMethod(u"GetProcAddress", [](VoidPointer* module, Text16 name) {
+				return VoidPointer::make(GetProcAddress((HMODULE)module->getAddressRaw(), TSZ() << (Utf16ToUtf8)name));
+				});
+			cgate.setMethod(u"GetProcAddressByOrdinal", [](VoidPointer* module, int ordinal) {
+				return VoidPointer::make(GetProcAddress((HMODULE)module->getAddressRaw(), (LPCSTR)(intptr_t)ordinal));
+				});
+			cgate.set(u"GetModuleHandleWPtr", VoidPointer::make(GetModuleHandleW));
+			cgate.setMethod(u"GetModuleHandleW", [](JsValue name) {
+				return VoidPointer::make(GetModuleHandleW(name == nullptr ? nullptr : wide(name.cast<Text16>().data())));
+				});
 			cgate.setMethod(u"nodeLoopOnce", nodegate::loopOnce);
 			cgate.set(u"nodeLoop", VoidPointer::make(nodegate::loop));
 			cgate.set(u"tester", VoidPointer::make(tester));
 
-			cgate.setMethod(u"allocExecutableMemory", [](uint64_t size) {
+			cgate.setMethod(u"allocExecutableMemory", [](uint64_t size, uint64_t align) {
 				hook::ExecutableAllocator* alloc = hook::ExecutableAllocator::getInstance();
 				StaticPointer* ptr = StaticPointer::newInstance();
-				ptr->setAddressRaw(alloc->alloc(size));
+				ptr->setAddressRaw(alloc->alloc(size, max(align, 1)));
 				return ptr;
+				});
+		}
+
+		{
+			JsValue chakraUtil = JsNewObject;
+			exports.set(u"chakraUtil", chakraUtil);
+
+			chakraUtil.set(u"stack_alloc", VoidPointer::make(stackutil::stack_alloc));
+			chakraUtil.set(u"stack_free_all", VoidPointer::make(stackutil::stack_free_all));
+			chakraUtil.set(u"stack_ptr", VoidPointer::make(&stackutil::last_allocate));
+			chakraUtil.set(u"stack_utf8", VoidPointer::make(stackutil::to_utf8));
+			chakraUtil.set(u"stack_ansi", VoidPointer::make(stackutil::to_ansi));
+			chakraUtil.set(u"from_utf8", VoidPointer::make(stackutil::from_utf8));
+			chakraUtil.set(u"from_ansi", VoidPointer::make(stackutil::from_ansi));
+			chakraUtil.set(u"pointer_js2class", VoidPointer::make(stackutil::pointer_js2class));
+			chakraUtil.setMethodRaw(u"JsCreateFunction", [](const JsArguments& args)->JsValue {
+				VoidPointer* fnptr = args.at<VoidPointer*>(0);
+				if (fnptr == nullptr) throw JsException(u"Need *Pointer for the first parameter");
+				VoidPointer* paramptr = args.at<VoidPointer*>(1);
+
+				JsValueRef func;
+				JsErrorCode err = JsCreateFunction(
+					(JsNativeFunction)fnptr->getAddressRaw(),
+					paramptr->getAddressRawSafe(),
+					&func);
+
+				return (JsValue)(JsRawData)func;
+				});
+			chakraUtil.setMethodRaw(u"JsAddRef", [](const JsArguments& args)->JsValue {
+				unsigned int old;
+				JsErrorCode err = JsAddRef(args.at<JsValue>(0).getRaw(), &old);
+				if (err != JsNoError) throwJsErrorCode(err);
+				return old;
+				});
+			chakraUtil.setMethodRaw(u"JsRelease", [](const JsArguments& args)->JsValue {
+				unsigned int old;
+				JsErrorCode err = JsRelease(args.at<JsValue>(0).getRaw(), &old);
+				if (err != JsNoError) throwJsErrorCode(err);
+				return old;
+				});
+			chakraUtil.setMethodRaw(u"asJsValueRef", [](const JsArguments& args)->JsValue {
+				return VoidPointer::make(args.at<JsValue>(0).getRaw());
 				});
 		}
 
 		exports.set(u"ipfilter", getNetFilterNamespace());
 		exports.set(u"jshook", getJsHookNamespace());
-		exports.set(u"makefunc", getMakeFuncNamespace());
 		exports.set(u"runtimeError", runtimeError::getNamespace());
 		exports.set(u"pdb", getPdbNamespace());
 		exports.set(u"uv_async", getUvAsyncNamespace());
@@ -302,7 +428,6 @@ void nodegate::initNativeModule(void* exports_raw) noexcept
 			obj.set(u"cxxthrow", VoidPointer::make(cxxthrow));
 			obj.set(u"cxxthrowString", VoidPointer::make(cxxthrowString));
 			exports.set(u"cxxException", obj);
-
 		}
 	}
 	s_globalScope.create();

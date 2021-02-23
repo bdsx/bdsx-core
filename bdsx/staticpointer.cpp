@@ -17,6 +17,7 @@ struct Ucrtbase
 	Ucrtbase() noexcept
 	{
 		HMODULE dll = GetModuleHandleW(L"ucrtbase.dll");
+		_assert(dll != nullptr);
 		malloc = (autoptr)GetProcAddress(dll, "malloc");
 		free = (autoptr)GetProcAddress(dll, "free");
 	}
@@ -607,6 +608,7 @@ void StaticPointer::initMethods(JsClassT<StaticPointer>* cls) noexcept
 	cls->setMethod(u"getBuffer", &StaticPointer::getBuffer);
 	cls->setMethod(u"getCxxString", &StaticPointer::getCxxString);
 
+	cls->setMethod(u"fill", &StaticPointer::fill);
 	cls->setMethod(u"copyFrom", &StaticPointer::copyFrom);
 	cls->setMethod(u"setBoolean", &StaticPointer::setBoolean);
 	cls->setMethod(u"setUint8", &StaticPointer::setUint8);

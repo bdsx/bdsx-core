@@ -119,7 +119,7 @@ int runtimeError::raise(EXCEPTION_POINTERS* exptr) noexcept
 	{
 		DWORD64 rip = exptr->ContextRecord->Rip;
 		unsigned int code = exptr->ExceptionRecord->ExceptionCode;
-		cout << "ExceptionCode: " << hexf(code, 8) << endl;
+		cout << "ExceptionCode: 0x" << hexf(code, 8) << endl;
 		cout << "Thread Id: " << threadId << endl;
 		cout << "rip: 0x" << hexf(rip, 16) << endl;
 
@@ -189,7 +189,7 @@ void runtimeError::setHandler(kr::JsValue handler) noexcept
 {
 	s_field->handler = handler;
 }
-void runtimeError::fire(kr::JsValue error) noexcept
+void runtimeError::fire(JsValueRef error) noexcept
 {
 	JsScope _scope;
 	try
@@ -197,7 +197,7 @@ void runtimeError::fire(kr::JsValue error) noexcept
 		JsValue handler = s_field->handler;
 		if (!handler.isEmpty())
 		{
-			handler.call(error);
+			handler.call((JsValue)(JsRawData)error);
 		}
 	}
 	catch (JsException& err)
@@ -250,5 +250,6 @@ kr::JsValue runtimeError::getNamespace() noexcept
 	runtimeError.setMethod(u"codeToString", codeToString);
 	runtimeError.set(u"raise", VoidPointer::make(raise));
 	runtimeError.setMethod(u"setHandler", setHandler);
+	runtimeError.set(u"fire", VoidPointer::make(fire));
 	return runtimeError;
 }

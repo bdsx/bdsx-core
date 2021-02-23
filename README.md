@@ -14,7 +14,7 @@ It's the core for [bdsx](https://github.com/bdsx/bdsx)
 ├ ken (https://github.com/karikera/ken) - personal library project  
 └ bdsx-core (https://github.com/bdsx/bdsx-core)  
 
-2. Update git submodules.
+2. Update git submodules for each project.
 
 3. Build bdsx.sln with Visual Studio 2019.
 

@@ -14,6 +14,7 @@ public:
 
 	void setAddressRaw(const void* ptr) noexcept;
 	void* getAddressRaw() noexcept;
+	void* getAddressRawSafe() noexcept;
 	int32_t getAddressLow() noexcept;
 	int32_t getAddressHigh() noexcept;
 	kr::Text16 getAddressBin() noexcept;

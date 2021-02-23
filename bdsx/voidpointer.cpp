@@ -23,6 +23,11 @@ void* VoidPointer::getAddressRaw() noexcept
 {
 	return m_address;
 }
+void* VoidPointer::getAddressRawSafe() noexcept
+{
+	if (this == nullptr) return nullptr;
+	return m_address;
+}
 int32_t VoidPointer::getAddressLow() noexcept
 {
 	return (uint32_t)(uintptr_t)m_address;

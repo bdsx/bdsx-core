@@ -19,6 +19,7 @@ namespace nodegate
 	int start(int argc, char** argv) noexcept;
 	void loopOnce() noexcept;
 	void loop(uint64_t hd_point) noexcept;
+	int addRef(void* param) throws(kr::JsException);
 }
 
 class AsyncTask :public kr::AtomicQueueNode
