@@ -197,7 +197,7 @@ echo #define BUILD_TIME "%25date%-%time2:.=%"&gt;"gen/buildtime.h"</Command>
       <FileType>Document</FileType>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">gen\version.h;$(SolutionDir)..\bdsx\bdsx\version-bdsx.json</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">gen\version.h;$(SolutionDir)..\bdsx\bdsx\version.json</Outputs>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">gen\version.h;$(SolutionDir)..\bdsx\bdsx\version.json</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">gen\version.h;$(SolutionDir)..\bdsx\bdsx\version-bdsx.json</Outputs>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@call "%(Identity)"
 
 @set resver=%25BDSX_CORE_VERSION:.=,% 
@@ -217,7 +217,7 @@ echo #define BUILD_TIME "%25date%-%time2:.=%"&gt;"gen/buildtime.h"</Command>
 @set resver=%25BDSX_CORE_VERSION:.=,% 
 @echo #define BDSX_CORE_VERSION "%25BDSX_CORE_VERSION%"&gt;gen\version.h
 @echo #define BDSX_CORE_VERSION_RES %resver%&gt;&gt;gen\version.h
-@echo {"coreVersion":"%25BDSX_CORE_VERSION%"}&gt;"$(SolutionDir)..\bdsx\bdsx\version.json"
+@echo "%25BDSX_CORE_VERSION%"&gt;"$(SolutionDir)..\bdsx\bdsx\version-bdsx.json"
 </Command>
       <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(identity)</Message>
       <Message Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">%(identity)</Message>
