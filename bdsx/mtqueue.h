@@ -13,8 +13,10 @@ public:
 	MultiThreadQueue(const kr::JsArguments& args) throws(kr::JsException);
 	void enqueue(void* src) noexcept;
 	void dequeue(void* dest) noexcept;
+	bool tryDequeue(void* dest) noexcept;
 	void enqueueJs(VoidPointer* src) noexcept;
 	void dequeueJs(VoidPointer* dest) noexcept;
+	bool tryDequeueJs(VoidPointer* dest) noexcept;
 
 	static void initMethods(kr::JsClassT<MultiThreadQueue>* cls) noexcept;
 

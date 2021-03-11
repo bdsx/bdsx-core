@@ -3,6 +3,7 @@
 #include "voidpointer.h"
 #include "nodegate.h"
 #include "jsctx.h"
+#include "unwind.h"
 
 #include <KR3/win/windows.h>
 #include <KR3/mt/criticalsection.h>
@@ -74,6 +75,12 @@ namespace
 		}
 		return u"[Unknown]";
 	}
+	bool addFunctionTable(VoidPointer* baseptr, int unwindcount, int fncount) throws(JsException)
+	{
+		if (baseptr == nullptr) throw JsException(u"Invalid arguments");
+		DWORD64 base = (DWORD64)baseptr->getAddressRawSafe();
+		return RtlAddFunctionTable((RUNTIME_FUNCTION*)(base + unwindcount * sizeof(UNWIND_INFO)), fncount, base);
+	}
 }
 
 kr::Text16 runtimeError::codeToString(unsigned int errorCode) noexcept
@@ -109,7 +116,7 @@ kr::Text16 runtimeError::codeToString(unsigned int errorCode) noexcept
 	}
 }
 
-int runtimeError::raise(EXCEPTION_POINTERS* exptr) noexcept
+ATTR_NORETURN void runtimeError::raise(EXCEPTION_POINTERS* exptr) noexcept
 {
 	static DWORD raising = 0;
 	if (raising != 0) Sleep(INFINITE);
@@ -148,7 +155,6 @@ int runtimeError::raise(EXCEPTION_POINTERS* exptr) noexcept
 		debug();
 	}
 #endif
-	
 
 	for (;;)
 	{
@@ -183,7 +189,6 @@ int runtimeError::raise(EXCEPTION_POINTERS* exptr) noexcept
 		}
 	}
 	Sleep(INFINITE);
-	return EXCEPTION_EXECUTE_HANDLER;
 }
 void runtimeError::setHandler(kr::JsValue handler) noexcept
 {
@@ -206,16 +211,6 @@ void runtimeError::fire(JsValueRef error) noexcept
 	}
 	terminate(-1);
 }
-SehHandler* runtimeError::beginHandler() noexcept
-{
-	return (SehHandler*)_set_se_translator([](unsigned int code, EXCEPTION_POINTERS* exptr) {
-		raise(exptr);
-		});
-}
-void runtimeError::endHandler(SehHandler* old) noexcept
-{
-	_set_se_translator((_se_translator_function)old);
-}
 kr::JsValue runtimeError::getError() noexcept
 {
 	CsLock lock = s_stackLock;
@@ -226,8 +221,8 @@ kr::JsValue runtimeError::getError() noexcept
 	TSZ16 message;
 	message << u"RuntimeError: " << codeToString(code) << u"(0x" << hexf(code, 8) << u')';
 	JsValue err = runtimeErrorAllocator.call((Text16)message);
+	err.set(u"code", (int)code);
 	
-
 	err.set(s_field->nativeStack, s_nativeExceptionStack);
 	if (s_threadId != s_field->threadId)
 	{
@@ -242,14 +237,14 @@ kr::JsValue runtimeError::getRuntimeErrorClass() noexcept
 {
 	return (JsValue)s_field->runtimeErrorClass;
 }
+
 kr::JsValue runtimeError::getNamespace() noexcept
 {
 	JsValue runtimeError = JsNewObject;
-	runtimeError.set(u"beginHandler", VoidPointer::make(beginHandler));
-	runtimeError.set(u"endHandler", VoidPointer::make(endHandler));
 	runtimeError.setMethod(u"codeToString", codeToString);
 	runtimeError.set(u"raise", VoidPointer::make(raise));
 	runtimeError.setMethod(u"setHandler", setHandler);
 	runtimeError.set(u"fire", VoidPointer::make(fire));
+	runtimeError.setMethod(u"addFunctionTable", addFunctionTable);
 	return runtimeError;
 }

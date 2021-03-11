@@ -83,13 +83,6 @@ StaticPointer::StaticPointer(const JsArguments& args) noexcept
 	else m_address = nullptr;
 }
 
-TText16 StaticPointer::toString() noexcept
-{
-	TText16 out;
-	out << hexf((uintptr_t)m_address, sizeof(uintptr_t) * 2);
-	return out;
-}
-
 bool StaticPointer::getBoolean(int offset) throws(JsException)
 {
 	return _getas<bool>(offset);
@@ -587,8 +580,6 @@ void StaticPointer::setJsValueRef(JsValue v, int offset) throws(kr::JsException)
 
 void StaticPointer::initMethods(JsClassT<StaticPointer>* cls) noexcept
 {
-	cls->setMethod(u"toString", &StaticPointer::toString);
-
 	cls->setMethod(u"getBoolean", &StaticPointer::getBoolean);
 	cls->setMethod(u"getUint8", &StaticPointer::getUint8);
 	cls->setMethod(u"getUint16", &StaticPointer::getUint16);

@@ -45,10 +45,10 @@ namespace
 		size_t skipCount;
 	};
 
-	using __scrt_common_main_seh_t = int(*)();
 	using main_t = int(*)(int, char**, char**);
 	main_t s_bedrockMain;
-	__scrt_common_main_seh_t s_bedrockSehMain;
+	constexpr size_t ORIGINAL_BYTES_COUNT = 12;
+	byte s_bedrockMainOriginal12Bytes[ORIGINAL_BYTES_COUNT];
 
 	TText16 readNativeStackFromExceptionPointer(EXCEPTION_POINTERS* ptr) noexcept
 	{
@@ -70,7 +70,7 @@ int nodeStart(int argc, char** argv) noexcept
 	{
 		return nodegate::start(argc, argv);
 	}
-	__except (GetExceptionCode() == EXCEPTION_BREAKPOINT ? EXCEPTION_CONTINUE_SEARCH : runtimeError::raise(GetExceptionInformation()))
+	__except (GetExceptionCode() == EXCEPTION_BREAKPOINT ? EXCEPTION_CONTINUE_SEARCH : (runtimeError::raise(GetExceptionInformation()), EXCEPTION_EXECUTE_HANDLER))
 	{
 		return -1;
 	}
@@ -133,54 +133,24 @@ BOOL WINAPI DllMain(
 		}
 
 		// load pdb
-		if (!g_pdb.getProcAddresses(CachedPdb::predefinedForCore.data(), View<Text>{ "__scrt_common_main_seh"_tx }, [](Text name, void* fnptr, void*) {
-			s_bedrockSehMain = (__scrt_common_main_seh_t)fnptr;
+		PdbReader::setOptions(0);
+		if (!g_pdb.getProcAddresses(CachedPdb::predefinedForCore.data(), View<Text>{ "main"_tx }, [](Text name, void* fnptr, void*) {
+			s_bedrockMain = (main_t)fnptr;
 			}, nullptr, false))
 		{
 			terminate(-1);
 		}
-		if (s_bedrockSehMain == nullptr)
+		if (s_bedrockMain == nullptr)
 		{
-			cerr << "[BDSX] Failed to find entry of bedrock_server.exe" << endl;
+			cerr << "[BDSX] Failed to find 'main' of bedrock_server.exe" << endl;
 			terminate(-1);
 		}
-		PdbReader::setOptions(0);
-
 		// hook main
-
-		size_t offset_hook = 0xff;
-		size_t offset_call = offset_hook + 0x8;
-
-		int32_t offset_main_call = *(Unaligned<int32_t>*)((byte*)s_bedrockSehMain + offset_call + 1);
-		s_bedrockMain = (main_t)((byte*)s_bedrockSehMain + offset_call + 5 + offset_main_call);
-
-		/*
-		mov r8,rax
-		mov rdx,rdi
-		mov ecx,dword ptr ds:[rbx]
-		call <bedrock_server.main>
-		*/
-		static const byte ORIGINAL_CODE[] = {
-			0x4C, 0x8B, 0xC0,
-			0x48, 0x8B, 0xD7,
-			0x8B, 0x0B,
-			0xE8, 0xB0, 0x47, 0xFF, 0xFE
-		};
-
-		JitFunction junction(64);
-		junction.mov(R8, RAX);
-		junction.mov(RDX, RDI);
-		junction.mov(RCX, QwordPtr, RBX);
-		junction.jump64(nodeStart, RAX);
-		CodeDiff diff = junction.patchTo((byte*)s_bedrockSehMain + offset_hook, ORIGINAL_CODE, R9, false, { {9, 13} });
-		if (!diff.succeeded())
 		{
-			cerr << "[BDSX] entry point hooking failed, bytes did not matched at {";
-			for (const pair<size_t, size_t>& v : diff)
-			{
-				cerr << " {" << v.first << ", " << v.second << "}, ";
-			}
-			cerr << '}' << endl;
+			memcpy(s_bedrockMainOriginal12Bytes, s_bedrockMain, ORIGINAL_BYTES_COUNT);
+			Unprotector unpro(s_bedrockMain, ORIGINAL_BYTES_COUNT);
+			CodeWriter writer((void*)unpro, ORIGINAL_BYTES_COUNT);
+			writer.jump(nodeStart, RAX);
 		}
 	}
 	return true;
@@ -319,7 +289,6 @@ namespace
 	}
 }
 
-
 void nodegate::initNativeModule(void* exports_raw) noexcept
 {
 	g_ctx.create();
@@ -343,6 +312,7 @@ void nodegate::initNativeModule(void* exports_raw) noexcept
 			bedrock_server_exe.set(u"args", VoidPointer::make(s_args));
 			bedrock_server_exe.set(u"argsLine", (Text16)unwide(GetCommandLineW()));
 			bedrock_server_exe.set(u"main", VoidPointer::make(s_bedrockMain));
+			bedrock_server_exe.set(u"mainOriginal12Bytes", VoidPointer::make(s_bedrockMainOriginal12Bytes));
 			bedrock_server_exe.setMethod(u"forceKill", kr::terminate);
 		}
 

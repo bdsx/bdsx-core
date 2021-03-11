@@ -163,6 +163,7 @@ echo #define BUILD_TIME "%25date%-%time2:.=%"&gt;"gen/buildtime.h"</Command>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="mtqueue.h" />
+    <ClInclude Include="unwind.h" />
     <ClInclude Include="uvasync.h" />
     <ClInclude Include="structurepointer.h" />
     <ClInclude Include="cachedpdb.h" />

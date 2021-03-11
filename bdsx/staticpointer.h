@@ -70,8 +70,6 @@ public:
 	kr::JsValue getJsValueRef(int offset) throws(kr::JsException);
 	void setJsValueRef(kr::JsValue v, int offset) throws(kr::JsException);
 
-	kr::TText16 toString() noexcept;
-
 	static void initMethods(kr::JsClassT<StaticPointer>* cls) noexcept;
 
 private:

@@ -413,7 +413,6 @@ JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue arr
 			}
 			if (!local.quiet)
 			{
-				line << hexf((byte*)address - local.targets.base);
 				g_ctx->log(TText16() << (Utf8ToUtf16)line);
 			}
 			NativePointer* ptr = NativePointer::newInstance();
@@ -477,10 +476,6 @@ void CachedPdb::search(JsValue masks, JsValue cb) throws(kr::JsException)
 
 			m_pdb.search(nullptr, [&](Text name, void* address, uint32_t typeId) {
 				auto iter = finder.find(name);
-				if (name.endsWith("_fptr"))
-				{
-					debug();
-				}
 				if (finder.end() == iter) return true;
 
 				NativePointer* ptr = NativePointer::newInstance();
