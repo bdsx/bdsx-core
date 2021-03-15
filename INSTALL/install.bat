@@ -17,7 +17,6 @@ if not exist "%~1" mkdir "%~1"
 copy "%outdir%Chakra.dll" "%~1\Chakra.dll"
 copy "%outdir%Chakra.pdb" "%~1\Chakra.pdb"
 copy "%outdir%ChakraCore.dll" "%~1\ChakraCore.dll"
-copy "%solutiondir%INSTALL\dbghelp.dll" "%~1\dbghelp.dll"
 EXIT /B 0
 
 :zip

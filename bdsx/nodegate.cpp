@@ -107,18 +107,24 @@ void nodegate::loop(uint64_t hd_point) noexcept
         s_checkAsyncInAsync = false;
     }
 
-    constexpr int64_t milli2nano = std::nano::den / std::milli::den;
+    constexpr int64_t milli2nano = high_resolution_clock::period::den / std::milli::den;
 
     uv_loop_t* loop = uv_default_loop();
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    node::MultiIsolatePlatform* platform = node::GetMainThreadMultiIsolatePlatform();
     
-    int64_t duramilli = ((hd_point_t&)hd_point - high_resolution_clock::now()).count() / milli2nano;
+    uint64_t hd_now = high_resolution_clock::now().time_since_epoch().count();
+
+    int64_t duramilli = (int64_t)(hd_point - hd_now) / milli2nano;
     if (duramilli <= 0)
     {
         int counter = 0;
         for (;;)
         {
             counter++;
-            if (uv_run(loop, UV_RUN_NOWAIT) == 0) break;
+            int count = uv_run(loop, UV_RUN_NOWAIT);
+            platform->DrainTasks(isolate);
+            if (count == 0) break;
             if (counter > 30) break;
         }
         return;
@@ -129,21 +135,16 @@ void nodegate::loop(uint64_t hd_point) noexcept
         bool done = false;
     };
     Timer awakeTimer;
-    uv_timer_init(uv_default_loop(), &awakeTimer);
+    uv_timer_init(loop, &awakeTimer);
     uv_timer_start(&awakeTimer, [](uv_timer_t* timer){
         static_cast<Timer*>(timer)->done = true;
         uv_stop(uv_default_loop());
         }, duramilli, 0);
-    uv_work_t;
 
     for (;;)
     {
         uv_run(loop, UV_RUN_DEFAULT);
-
-        v8::Isolate* isolate = v8::Isolate::GetCurrent();
-        node::MultiIsolatePlatform* platform = node::GetMainThreadMultiIsolatePlatform();
         platform->DrainTasks(isolate);
-
         if (awakeTimer.done) break;
     }
 }
