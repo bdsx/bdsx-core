@@ -20,7 +20,7 @@ void StructurePointer::finalize() noexcept
 JsObject* StructurePointer::_allocate(const JsArguments& args) throws(JsException)
 {
 	StructurePointer* data;
-	if (args[0] == true)
+	if (args.size() != 0 && args[0] == true)
 	{
 		JsValue sizevar = args.getThis().getConstructor().get(s_size);
 		JsType type = sizevar.getType();

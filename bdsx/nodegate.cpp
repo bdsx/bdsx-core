@@ -149,6 +149,8 @@ void nodegate::loop(uint64_t hd_point) noexcept
     }
 }
 
+#include <typeinfo>
+
 AsyncTask::AsyncTask(void (*fn)(AsyncTask*)) noexcept
     :fn(fn)
 {

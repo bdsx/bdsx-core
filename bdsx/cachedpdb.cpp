@@ -18,9 +18,9 @@ kr::BText16<kr::Path::MAX_LEN> CachedPdb::predefinedForCore;
 
 namespace
 {
-	uint32_t getSelIndex(Text *text) noexcept
+	uint32_t getSelIndex(Text16 *text) noexcept
 	{
-		const char* namepos = text->find_r('#');
+		const char16* namepos = text->find_r(u'#');
 		if (namepos != nullptr)
 		{
 			uint32_t value = text->subarr(namepos + 1).to_uint();
@@ -51,10 +51,9 @@ namespace
 		uint32_t counter;
 		uint32_t mask;
 	};
-	template <bool selfBuffered>
 	struct SymbolMap
 	{
-		Map<Text, SymbolMaskInfo, selfBuffered> targets;
+		Map<Text16, SymbolMaskInfo, true> targets;
 		Keep<io::FOStream<char, false, false>> fos;
 		Keep<File> file;
 		byte* base;
@@ -75,9 +74,9 @@ namespace
 			}
 		}
 
-		void put(Text tx) noexcept
+		void put(Text16 tx) noexcept
 		{
-			const char* namepos = tx.find_r('#');
+			const char16* namepos = tx.find_r(u'#');
 			uint32_t selbit = 1U << getSelIndex(&tx);
 
 			auto res = targets.insert(tx, { 0, selbit });
@@ -87,7 +86,7 @@ namespace
 			}
 		}
 
-		bool del(Text name) noexcept
+		bool del(Text16 name) noexcept
 		{
 			uint32_t selbit = 1U << getSelIndex(&name);
 			auto iter = targets.find(name);
@@ -102,7 +101,7 @@ namespace
 			return true;
 		}
 
-		bool test(Text name, void* address, TText* line, Text* nameWithIndex) noexcept
+		bool test(Text16 name, void* address, TText16* line, Text16* nameWithIndex) noexcept
 		{
 			auto iter = targets.find(name);
 			if (iter == targets.end()) return false;
@@ -120,12 +119,12 @@ namespace
 			*line << name;
 			if (index != 0)
 			{
-				*line << '#' << index;
+				*line << u'#' << index;
 			}
 			*nameWithIndex = *line;
 
-			*line << " = 0x" << hexf((byte*)address - base);
-			if (fos != nullptr) *fos << "\r\n" << *line;
+			*line << u" = 0x" << hexf((byte*)address - base);
+			if (fos != nullptr) *fos << "\r\n" << (Utf16ToUtf8)*line;
 			return true;
 		}
 
@@ -134,7 +133,7 @@ namespace
 			return targets.empty();
 		}
 
-		uintptr_t readOffset(io::FIStream<char, false>* fis, Text* name) throws(EofException)
+		uintptr_t readOffset(io::FIStream<char, false>* fis, TText16* name) throws(EofException)
 		{
 			for (;;)
 			{
@@ -143,8 +142,11 @@ namespace
 				pcstr equal = line.find_r('=');
 				if (equal == nullptr) continue;
 
-				*name = line.cut(equal).trim();
-				if (!del(*name)) continue;
+				*name = (Utf8ToUtf16)line.cut(equal).trim();
+				if (!del(*name)) {
+					name->truncate();
+					continue;
+				}
 
 				Text value = line.subarr(equal + 1).trim();
 
@@ -236,14 +238,21 @@ int CachedPdb::getOptions() throws(JsException)
 	return out;
 }
 
-bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text> text, Callback cb, void* param, bool quiet) noexcept
+TText16 CachedPdb::undecorate(Text16 text, int flags) noexcept {
+
+	TText16 undecorated;
+	undecorated << PdbReader::undecorate(text.data(), flags);
+	return move(undecorated);
+}
+
+bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text16> text, Callback cb, void* param, bool quiet) noexcept
 {
 	if (text.empty()) return true;
 
 	CsLock __lock = s_lock;
-	SymbolMap<true> targets(predefined);
+	SymbolMap targets(predefined);
 
-	for (Text tx : text)
+	for (Text16 tx : text)
 	{
 		targets.put(tx);
 	}
@@ -267,10 +276,10 @@ bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text> text, Callback c
 			{
 				for (;;)
 				{
-					Text name;
+					TText16 name;
 					uintptr_t offset = targets.readOffset(fis, &name);
 					cb(name, targets.base + offset, param);
-					// if (targets.empty()) return true;
+					if (targets.empty()) return true;
 				}
 			}
 		}
@@ -291,20 +300,20 @@ bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text> text, Callback c
 
 		struct Local
 		{
-			SymbolMap<true>& targets;
-			void(*cb)(Text name, void* fnptr, void* param);
+			SymbolMap& targets;
+			void(*cb)(Text16 name, void* fnptr, void* param);
 			void* param;
 			bool quiet;
 		} local = { targets, cb, param, quiet };
 
 		if (targets.file != nullptr && targets.fos == nullptr) targets.fos = _new io::FOStream<char, false, false>(targets.file);
 
-		m_pdb.search(nullptr, [&local](Text name, void* address, uint32_t typeId) {
-			TText line;
-			Text nameWithIndex;
+		m_pdb.search16(nullptr, [&local](Text16 name, void* address, uint32_t typeId) {
+			TText16 line;
+			Text16 nameWithIndex;
 			if (!local.targets.test(name, address, &line, &nameWithIndex)) return true;
 
-			if (!local.quiet) cout << line << endl;
+			if (!local.quiet) cout << (Utf16ToAnsi)line << endl;
 			local.cb(nameWithIndex, address, local.param);
 			return !local.targets.empty();
 			});
@@ -339,7 +348,7 @@ bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text> text, Callback c
 
 	return true;
 }
-JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue array, bool quiet) throws(kr::JsException)
+JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue array, bool quiet, uint32_t undecorateOpts) throws(kr::JsException)
 {
 	int length = array.getArrayLength();
 	if (length == 0) return out;
@@ -347,11 +356,11 @@ JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue arr
 	if (!s_lock.tryEnter()) throw JsException(u"BUSY. It's using by async task");
 	finally { s_lock.leave(); };
 
-	SymbolMap<false> targets(predefined);
+	SymbolMap targets(predefined);
 
 	for (int i = 0; i < length; i++)
 	{
-		targets.put(array.get(i).cast<TText>());
+		targets.put(array.get(i).cast<Text16>());
 	}
 
 	if (predefined != nullptr)
@@ -372,7 +381,7 @@ JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue arr
 			{
 				for (;;)
 				{
-					Text name;
+					TText16 name;
 					uintptr_t offset = targets.readOffset(fis, &name);
 					NativePointer* ptr = NativePointer::newInstance();
 					ptr->setAddressRaw(targets.base + offset);
@@ -397,23 +406,30 @@ JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue arr
 				
 		struct Local
 		{
-			SymbolMap<false>& targets;
+			SymbolMap& targets;
 			bool quiet;
 			JsValue& out;
-		} local = {targets, quiet, out };
+			uint32_t undecorateOpts;
+		} local = {targets, quiet, out, undecorateOpts };
 
 		if (targets.file != nullptr && targets.fos == nullptr) targets.fos = _new io::FOStream<char, false, false>(targets.file);
 
-		m_pdb.search(nullptr, [&local](Text name, void* address, uint32_t typeId) {
-			TText line;
-			Text nameWithIndex;
+		m_pdb.search16(nullptr, [&local](Text16 name, void* address, uint32_t typeId) {
+			TText16 undecorated;
+			if (local.undecorateOpts != -1)
+			{
+				undecorated << PdbReader::undecorate(name.data(), local.undecorateOpts);
+				name = undecorated;
+			}
+			Text16 nameWithIndex;
+			TText16 line;
 			if (!local.targets.test(name, address, &line, &nameWithIndex))
 			{
 				return true;
 			}
 			if (!local.quiet)
 			{
-				g_ctx->log(TText16() << (Utf8ToUtf16)line);
+				g_ctx->log(line);
 			}
 			NativePointer* ptr = NativePointer::newInstance();
 			ptr->setAddressRaw(address);
@@ -537,7 +553,7 @@ JsValue CachedPdb::getAll(JsValue onprogress) throws(kr::JsException)
 			local.onprogress = onprogress;
 			local.report();
 		}
-		reader.getAll([&local](Text name, autoptr address) {
+		reader.getAll([&local](Text name, autoptr address, int typeId) {
 			++local.totalcount;
 			timepoint newnow = timepoint::now();
 			if (newnow - local.now > 500_ms)
@@ -572,52 +588,54 @@ JsValue getPdbNamespace() noexcept
 	pdb.setMethod(u"close", [] { return g_pdb.close(); });
 	pdb.setMethod(u"setOptions", [](int options) { return g_pdb.setOptions(options); });
 	pdb.setMethod(u"getOptions", []() { return g_pdb.getOptions(); });
+	pdb.setMethod(u"undecorate", [](Text16 text, int flags)->TText16 { return g_pdb.undecorate(text, flags); });
 	pdb.setMethod(u"search", [](JsValue masks, JsValue cb) { return g_pdb.search(masks, cb); });
-	pdb.setMethod(u"getProcAddresses", [](JsValue out, JsValue array, bool quiet) { return g_pdb.getProcAddresses(CachedPdb::predefinedForCore.data(), out, array, quiet); });
+	pdb.setMethod(u"getProcAddresses", [](JsValue out, JsValue array, bool quiet, bool undecorated) { return g_pdb.getProcAddresses(CachedPdb::predefinedForCore.data(), out, array, quiet, undecorated); });
 
-	JsValue getList = JsFunction::makeT([](Text16 predefined, JsValue out, JsValue array, bool quiet) { 
-		return g_pdb.getProcAddresses(predefined.data(), out, array, quiet); 
+	JsValue getList = JsFunction::makeT([](Text16 predefined, JsValue out, JsValue array, bool quiet, JsValue undecorateOpts) {
+		return g_pdb.getProcAddresses(predefined.data(), out, array, quiet, undecorateOpts == undefined ? -1 : undecorateOpts.as<int>());
 		});
-	// should I do this?
-	//getList.setMethod(u"async", [](Text16 predefined, JsValue out, JsValue array, bool quiet) { 
-
-	//	Array<Text> list;
-
-	//	AText buffer;
-	//	buffer.reserve(1024);
-
-	//	int32_t len = array.getArrayLength();
-	//	for (int i = 0; i < len; i++)
-	//	{
-	//		size_t front = buffer.size();
-	//		buffer << (Utf16ToUtf8)array.get(i).cast<Text16>();
-	//		size_t back = buffer.size();
-	//		buffer << '\0';
-
-	//		list.push(Text((pcstr)front, (pcstr)back));
-	//	}
-
-	//	ThreadHandle::createLambda([predefined = AText16::concat(predefined, nullterm), quiet, buffer = move(buffer), list = move(list)]() mutable{
-	//		intptr_t off = (intptr_t)buffer.data();
-	//		for (Text& v : list)
-	//		{
-	//			v.addBegin(off);
-	//			v.addEnd(off);
-	//		}
-	//		struct Local
-	//		{
-	//			AText out;
-	//		} local;
-	//		local.out.reserve(1024);
-	//		g_pdb.getProcAddressesT<Local>(predefined.data(), list, [](Text name, void* fnptr, Local* param) {
-
-	//			}, &local, quiet);
-	//		AsyncTask::post([predefined = move(predefined), quiet, buffer = move(buffer), list = move(list)]() mutable{
-
-	//		});
-	//		});
-	//	});
 	pdb.set(u"getList", getList);
 	pdb.setMethod(u"getAll", [](JsValue onprogress) { return g_pdb.getAll(onprogress); });
 	return pdb;
 }
+
+// async pdb, not completed
+//getList.setMethod(u"async", [](Text16 predefined, JsValue out, JsValue array, bool quiet) {
+//
+//	Array<Text> list;
+//
+//	AText buffer;
+//	buffer.reserve(1024);
+//
+//	int32_t len = array.getArrayLength();
+//	for (int i = 0; i < len; i++)
+//	{
+//		size_t front = buffer.size();
+//		buffer << (Utf16ToUtf8)array.get(i).cast<Text16>();
+//		size_t back = buffer.size();
+//		buffer << '\0';
+//
+//		list.push(Text((pcstr)front, (pcstr)back));
+//	}
+//
+//	ThreadHandle::createLambda([predefined = AText16::concat(predefined, nullterm), quiet, buffer = move(buffer), list = move(list)]() mutable{
+//		intptr_t off = (intptr_t)buffer.data();
+//		for (Text& v : list)
+//		{
+//			v.addBegin(off);
+//			v.addEnd(off);
+//		}
+//		struct Local
+//		{
+//			AText out;
+//		} local;
+//		local.out.reserve(1024);
+//		g_pdb.getProcAddressesT<Local>(predefined.data(), list, [](Text name, void* fnptr, Local* param) {
+//
+//			}, & local, quiet);
+//		AsyncTask::post([predefined = move(predefined), quiet, buffer = move(buffer), list = move(list)]() mutable{
+//
+//		});
+//	});
+//	});

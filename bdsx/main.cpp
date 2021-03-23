@@ -134,7 +134,7 @@ BOOL WINAPI DllMain(
 
 		// load pdb
 		PdbReader::setOptions(0);
-		if (!g_pdb.getProcAddresses(CachedPdb::predefinedForCore.data(), View<Text>{ "main"_tx }, [](Text name, void* fnptr, void*) {
+		if (!g_pdb.getProcAddresses(CachedPdb::predefinedForCore.data(), View<Text16>{ u"main"_tx }, [](Text16 name, void* fnptr, void*) {
 			s_bedrockMain = (main_t)fnptr;
 			}, nullptr, false))
 		{
