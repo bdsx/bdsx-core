@@ -19,6 +19,7 @@ void NativePointer::initMethods(JsClassT<NativePointer>* cls) noexcept
 	cls->setMethod(u"setAddress", &NativePointer::setAddress);
 	cls->setMethod(u"setAddressBin", &NativePointer::setAddressBin);
 	cls->setMethod(u"setAddressFromBuffer", &NativePointer::setAddressFromBuffer);
+	cls->setMethod(u"setAddressFromString", &NativePointer::setAddressFromString);
 	cls->setMethod(u"setAddressWithFloat", &NativePointer::setAddressWithFloat);
 
 	cls->setMethod(u"readBoolean", &NativePointer::readBoolean);
@@ -91,6 +92,10 @@ void NativePointer::setAddressFromBuffer(JsValue buffer) throws(kr::JsException)
 	Buffer ptr = buffer.getBuffer();
 	if (ptr == nullptr) throw JsException(u"argument must be Bufferable");
 	m_address = (byte*)ptr.data();
+}
+void NativePointer::setAddressFromString(Text16 text) noexcept
+{
+	m_address = (byte*)text.data();
 }
 void NativePointer::setAddressBin(Text16 text) throws(kr::JsException)
 {

@@ -16,6 +16,7 @@ public:
 	void setAddressPointer(VoidPointer* ptr) noexcept;
 	void setAddress(int32_t lowBits, int32_t highBits) noexcept;
 	void setAddressFromBuffer(kr::JsValue buffer) throws(kr::JsException);
+	void setAddressFromString(kr::Text16 text) noexcept;
 	void setAddressBin(kr::Text16 text) throws(kr::JsException);
 	void setAddressWithFloat(double value) throws(kr::JsException);
 

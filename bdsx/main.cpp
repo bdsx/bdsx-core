@@ -22,7 +22,6 @@
 #include <KR3/data/crypt.h>
 
 #include <shellapi.h>
-#include <DbgHelp.h>
 
 #define USE_EDGEMODE_JSRT
 #include <jsrt.h>
@@ -121,7 +120,6 @@ BOOL WINAPI DllMain(
 			TText16 moduleName = CurrentApplicationPath();
 			g_md5 = (encoder::Hex)(TBuffer)encoder::Md5::hash(File::open(moduleName.data()));
 
-			CurrentApplicationPath();
 			path16.joinEx(&CachedPdb::predefinedForCore, { (Text16)moduleName, (Text16)u"../../bdsx/bds/pdb.ini"}, false);
 			CachedPdb::predefinedForCore << nullterm;
 		}
@@ -136,7 +134,7 @@ BOOL WINAPI DllMain(
 		PdbReader::setOptions(0);
 		if (!g_pdb.getProcAddresses(CachedPdb::predefinedForCore.data(), View<Text16>{ u"main"_tx }, [](Text16 name, void* fnptr, void*) {
 			s_bedrockMain = (main_t)fnptr;
-			}, nullptr, false))
+			}, nullptr, false, true))
 		{
 			terminate(-1);
 		}

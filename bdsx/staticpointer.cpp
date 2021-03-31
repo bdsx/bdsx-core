@@ -169,23 +169,21 @@ JsValue StaticPointer::getString(JsValue bytes, int offset, int encoding) throws
 	if (encoding == ExEncoding::UTF16)
 	{
 		pstr16 str = (pstr16)(m_address + offset);
-		Text16 text;
 		try
 		{
 			if (bytes == undefined)
 			{
-				text = Text16(str, mem16::find(str, '\0'));
+				return Text16(str, mem16::find(str, '\0'));
 			}
 			else
 			{
-				text = Text16(str, bytes.cast<int>());
+				return Text16(str, bytes.cast<int>());
 			}
 		}
 		catch (...)
 		{
 			accessViolation(str);
 		}
-		return text;
 	}
 	else if (encoding == ExEncoding::BUFFER)
 	{
@@ -194,9 +192,9 @@ JsValue StaticPointer::getString(JsValue bytes, int offset, int encoding) throws
 	else
 	{
 		pstr str = (pstr)(m_address + offset);
-		TText16 text;
 		try
 		{
+			TText16 text;
 			Text src;
 			if (bytes == undefined)
 			{

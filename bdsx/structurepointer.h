@@ -16,5 +16,5 @@ public:
 	static void clearMethods() noexcept;
 
 private:
-	bool m_allocatedItSelf;
+	void(*m_finalize)(void*);
 };

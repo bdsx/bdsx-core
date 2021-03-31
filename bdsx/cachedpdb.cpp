@@ -9,6 +9,8 @@
 #include <KRWin/handle.h>
 #include <KR3/data/crypt.h>
 
+#include <KR3/win/dynamic_dbghelp.h>
+
 using namespace kr;
 
 CachedPdb g_pdb;
@@ -46,6 +48,12 @@ namespace
 
 	CriticalSection s_lock;
 
+	enum class CacheState
+	{
+		Found,
+		New,
+		NotMatched
+	};
 	struct SymbolMaskInfo
 	{
 		uint32_t counter;
@@ -57,6 +65,7 @@ namespace
 		Keep<io::FOStream<char, false, false>> fos;
 		Keep<File> file;
 		byte* base;
+		bool endWithLine = true;
 
 		SymbolMap(pcstr16 filepath) noexcept
 			:fos(nullptr)
@@ -124,7 +133,7 @@ namespace
 			*nameWithIndex = *line;
 
 			*line << u" = 0x" << hexf((byte*)address - base);
-			if (fos != nullptr) *fos << "\r\n" << (Utf16ToUtf8)*line;
+			if (fos != nullptr) *fos << (Utf16ToUtf8)*line << "\r\n";
 			return true;
 		}
 
@@ -133,22 +142,27 @@ namespace
 			return targets.empty();
 		}
 
+		void startWriting() noexcept 
+		{
+			if (file != nullptr && fos == nullptr) fos = _new io::FOStream<char, false, false>(file);
+		}
+
 		uintptr_t readOffset(io::FIStream<char, false>* fis, TText16* name) throws(EofException)
 		{
 			for (;;)
 			{
-				Text line = fis->readLine();
-
-				pcstr equal = line.find_r('=');
+				auto line = fis->readLine();
+				if (!line.second) endWithLine = false;
+				pcstr equal = line.first.find_r('=');
 				if (equal == nullptr) continue;
 
-				*name = (Utf8ToUtf16)line.cut(equal).trim();
+				*name = (Utf8ToUtf16)line.first.cut(equal).trim();
 				if (!del(*name)) {
 					name->truncate();
 					continue;
 				}
 
-				Text value = line.subarr(equal + 1).trim();
+				Text value = line.first.subarr(equal + 1).trim();
 
 				if (value.startsWith("0x"))
 				{
@@ -161,25 +175,41 @@ namespace
 			}
 		}
 
-		bool checkMd5(io::FIStream<char, false>* fis) noexcept
+		CacheState checkMd5(io::FIStream<char, false>* fis, bool overwrite) noexcept
 		{
 			try
 			{
-				Text line = fis->readLine();
-				if (line != g_md5)
-				{
+				auto md5 = fis->readLine();
+				if (md5.first.empty()) {
 					file->toBegin();
 					file->truncate();
 					throw EofException();
 				}
+				if (md5.first != g_md5)
+				{
+					if (!overwrite) {
+						cerr << "[BDSX] MD5 Hash does not Matched" << endl;
+						cerr << "[BDSX] pdb.ini MD5 = " << md5.first << endl;
+						cerr << "[BDSX] current MD5 = " << g_md5 << endl;
+						cerr << "[BDSX] Please use 'npm i' to update it" << endl;
+						return CacheState::NotMatched;
+					}
+					file->toBegin();
+					file->truncate();
+					throw EofException();
+				}
+				if (!md5.second)
+				{
+					endWithLine = false;
+				}
 			}
 			catch (EofException&)
 			{
-				fos = _new io::FOStream<char, false, false>(file);
-				*fos << g_md5;
-				return true;
+				startWriting();
+				*fos << g_md5 << "\r\n";
+				return CacheState::New;
 			}
-			return false;
+			return CacheState::Found;
 		}
 	};
 
@@ -245,7 +275,7 @@ TText16 CachedPdb::undecorate(Text16 text, int flags) noexcept {
 	return move(undecorated);
 }
 
-bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text16> text, Callback cb, void* param, bool quiet) noexcept
+bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text16> text, Callback cb, void* param, bool quiet, bool overwrite) noexcept
 {
 	if (text.empty()) return true;
 
@@ -265,10 +295,11 @@ bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text16> text, Callback
 			return false;
 		}
 
+		__StreamWithPad fis = _new io::FIStream<char, false>((File*)targets.file);
 		try
 		{
-			__StreamWithPad fis = _new io::FIStream<char, false>((File*)targets.file);
-			if (targets.checkMd5(fis))
+			CacheState state = targets.checkMd5(fis, overwrite);
+			if (state == CacheState::New)
 			{
 				if (!quiet) cout << "[BDSX] Generating " << (Utf16ToAnsi)(Text16)predefined << endl;
 			}
@@ -285,8 +316,12 @@ bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text16> text, Callback
 		}
 		catch (EofException&)
 		{
+			if (!targets.endWithLine)
+			{
+				targets.startWriting();
+				targets.fos->write("\r\n");
+			}
 		}
-		if (targets.empty()) return true;
 	}
 
 	// load from pdb
@@ -306,7 +341,7 @@ bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text16> text, Callback
 			bool quiet;
 		} local = { targets, cb, param, quiet };
 
-		if (targets.file != nullptr && targets.fos == nullptr) targets.fos = _new io::FOStream<char, false, false>(targets.file);
+		targets.startWriting();
 
 		m_pdb.search16(nullptr, [&local](Text16 name, void* address, uint32_t typeId) {
 			TText16 line;
@@ -373,7 +408,7 @@ JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue arr
 		{
 			Must<io::FIStream<char, false>> fis = _new io::FIStream<char, false>((File*)targets.file);
 
-			if (targets.checkMd5(fis))
+			if (targets.checkMd5(fis, true) == CacheState::New)
 			{
 				if (!quiet) g_ctx->log(TSZ16() << u"[BDSX] Generating " << predefined);
 			}
@@ -392,6 +427,11 @@ JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue arr
 		}
 		catch (EofException&)
 		{
+			if (!targets.endWithLine)
+			{
+				targets.startWriting();
+				targets.fos->write("\r\n");
+			}
 		}
 	}
 
@@ -412,7 +452,7 @@ JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue arr
 			uint32_t undecorateOpts;
 		} local = {targets, quiet, out, undecorateOpts };
 
-		if (targets.file != nullptr && targets.fos == nullptr) targets.fos = _new io::FOStream<char, false, false>(targets.file);
+		targets.startWriting();
 
 		m_pdb.search16(nullptr, [&local](Text16 name, void* address, uint32_t typeId) {
 			TText16 undecorated;
@@ -520,8 +560,11 @@ JsValue CachedPdb::getAll(JsValue onprogress) throws(kr::JsException)
 	{
 		bool callback = onprogress.getType() == JsType::Function;
 		if (!callback) g_ctx->log(u"[BDSX] PdbReader: Search Symbols...");
-		PdbReader reader;
-		reader.load();
+
+		if (m_pdb.base() == nullptr)
+		{
+			m_pdb.load();
+		}
 
 		struct Local
 		{
@@ -553,7 +596,7 @@ JsValue CachedPdb::getAll(JsValue onprogress) throws(kr::JsException)
 			local.onprogress = onprogress;
 			local.report();
 		}
-		reader.getAll([&local](Text name, autoptr address, int typeId) {
+		m_pdb.getAll([&local](Text name, autoptr address, int typeId) {
 			++local.totalcount;
 			timepoint newnow = timepoint::now();
 			if (newnow - local.now > 500_ms)

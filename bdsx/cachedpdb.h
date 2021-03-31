@@ -18,7 +18,7 @@ public:
 	int setOptions(int options) throws(kr::JsException);
 	int getOptions() throws(kr::JsException);
 	kr::TText16 undecorate(kr::Text16 text, int flags) noexcept;
-	bool getProcAddresses(kr::pcstr16 predefined, kr::View<kr::Text16> text, Callback cb, void* param, bool quiet) noexcept;
+	bool getProcAddresses(kr::pcstr16 predefined, kr::View<kr::Text16> text, Callback cb, void* param, bool quiet, bool overwrite) noexcept;
 	template <typename T>
 	bool getProcAddressesT(kr::pcstr16 predefined, kr::View<kr::Text16> text, void(*cb)(kr::Text16 name, void* fnptr, T* param), T* param, bool quiet) noexcept
 	{
