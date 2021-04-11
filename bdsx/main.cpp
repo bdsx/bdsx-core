@@ -132,12 +132,7 @@ BOOL WINAPI DllMain(
 
 		// load pdb
 		PdbReader::setOptions(0);
-		if (!g_pdb.getProcAddresses(CachedPdb::predefinedForCore.data(), View<Text16>{ u"main"_tx }, [](Text16 name, void* fnptr, void*) {
-			s_bedrockMain = (main_t)fnptr;
-			}, nullptr, false, true))
-		{
-			terminate(-1);
-		}
+		s_bedrockMain = g_pdb.getProcAddress(CachedPdb::predefinedForCore.data(), "main");
 		if (s_bedrockMain == nullptr)
 		{
 			cerr << "[BDSX] Failed to find 'main' of bedrock_server.exe" << endl;
@@ -244,24 +239,25 @@ namespace
 			}
 		}
 
-		char* to_ansi(const char16_t* str, size_t size) noexcept
+		char* to_ansi(const char16_t* str, size_t size, size_t* size_out) noexcept
 		{
 			Utf16ToAnsi dec = Text16(str, size);
 			size_t outsize = dec.size();
+			if (size_out != nullptr) *size_out = outsize;
 			char* out = (char*)stack_alloc(outsize + 1);
 			dec.copyTo(out);
 			out[outsize] = '\0';
 			return out;
 		}
 
-		char* to_utf8(const char16_t* str, size_t size) noexcept
+		char* to_utf8(const char16_t* str, size_t size, size_t* size_out) noexcept
 		{
 			Utf16ToUtf8 dec = Text16(str, size);
 			size_t outsize = dec.size();
+			if (size_out != nullptr) *size_out = outsize;
 			char* out = (char*)stack_alloc(outsize + 1);
 			dec.copyTo(out);
 			out[outsize] = '\0';
-
 			return out;
 		}
 
@@ -270,17 +266,17 @@ namespace
 			return JsValue((JsRawData)value).getNativeObject<VoidPointer>();
 		}
 
-		JsErrorCode from_ansi(pcstr str, JsValueRef* out) noexcept
+		JsErrorCode from_ansi(pcstr str, pcstr str_end, JsValueRef* out) noexcept
 		{
 			TSZ16 buf;
-			buf << (AnsiToUtf16)(Text)str;
+			buf << (AnsiToUtf16)(Text)Text(str, str_end == nullptr ? str+strlen(str) : str_end);
 			return JsPointerToString(wide(buf.data()), buf.size(), out);
 		}
 
-		JsErrorCode from_utf8(pcstr str, JsValueRef* out) noexcept
+		JsErrorCode from_utf8(pcstr str, pcstr str_end, JsValueRef* out) noexcept
 		{
 			TSZ16 buf;
-			buf << (Utf8ToUtf16)(Text)str;
+			buf << (AnsiToUtf16)(Text)Text(str, str_end == nullptr ? str + strlen(str) : str_end);
 			return JsPointerToString(wide(buf.data()), buf.size(), out);
 		}
 

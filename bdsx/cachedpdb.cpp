@@ -59,15 +59,15 @@ namespace
 		uint32_t counter;
 		uint32_t mask;
 	};
-	struct SymbolMap
+
+	struct SymbolCache
 	{
-		Map<Text16, SymbolMaskInfo, true> targets;
+		byte* base;
 		Keep<io::FOStream<char, false, false>> fos;
 		Keep<File> file;
-		byte* base;
 		bool endWithLine = true;
 
-		SymbolMap(pcstr16 filepath) noexcept
+		SymbolCache(pcstr16 filepath) noexcept
 			:fos(nullptr)
 		{
 			base = (byte*)GetModuleHandleW(nullptr);
@@ -81,6 +81,57 @@ namespace
 				{
 				}
 			}
+		}
+
+		void startWriting() noexcept
+		{
+			if (file != nullptr && fos == nullptr) fos = _new io::FOStream<char, false, false>(file);
+		}
+
+		CacheState checkMd5(io::FIStream<char, false>* fis, bool overwrite) noexcept
+		{
+			try
+			{
+				auto md5 = fis->readLine();
+				if (md5.first.empty()) {
+					file->toBegin();
+					file->truncate();
+					throw EofException();
+				}
+				if (md5.first != g_md5)
+				{
+					if (!overwrite) {
+						cerr << "[BDSX] MD5 Hash does not Matched" << endl;
+						cerr << "[BDSX] pdb.ini MD5 = " << md5.first << endl;
+						cerr << "[BDSX] current MD5 = " << g_md5 << endl;
+						cerr << "[BDSX] Please use 'npm i' to update it" << endl;
+						return CacheState::NotMatched;
+					}
+					file->toBegin();
+					file->truncate();
+					throw EofException();
+				}
+				if (!md5.second)
+				{
+					endWithLine = false;
+				}
+			}
+			catch (EofException&)
+			{
+				startWriting();
+				*fos << g_md5 << "\r\n";
+				return CacheState::New;
+			}
+			return CacheState::Found;
+		}
+	};
+	struct SymbolMap:SymbolCache
+	{
+		Map<Text16, SymbolMaskInfo, true> targets;
+
+		SymbolMap(pcstr16 filepath) noexcept
+			:SymbolCache(filepath)
+		{
 		}
 
 		void put(Text16 tx) noexcept
@@ -142,11 +193,6 @@ namespace
 			return targets.empty();
 		}
 
-		void startWriting() noexcept 
-		{
-			if (file != nullptr && fos == nullptr) fos = _new io::FOStream<char, false, false>(file);
-		}
-
 		uintptr_t readOffset(io::FIStream<char, false>* fis, TText16* name) throws(EofException)
 		{
 			for (;;)
@@ -175,42 +221,6 @@ namespace
 			}
 		}
 
-		CacheState checkMd5(io::FIStream<char, false>* fis, bool overwrite) noexcept
-		{
-			try
-			{
-				auto md5 = fis->readLine();
-				if (md5.first.empty()) {
-					file->toBegin();
-					file->truncate();
-					throw EofException();
-				}
-				if (md5.first != g_md5)
-				{
-					if (!overwrite) {
-						cerr << "[BDSX] MD5 Hash does not Matched" << endl;
-						cerr << "[BDSX] pdb.ini MD5 = " << md5.first << endl;
-						cerr << "[BDSX] current MD5 = " << g_md5 << endl;
-						cerr << "[BDSX] Please use 'npm i' to update it" << endl;
-						return CacheState::NotMatched;
-					}
-					file->toBegin();
-					file->truncate();
-					throw EofException();
-				}
-				if (!md5.second)
-				{
-					endWithLine = false;
-				}
-			}
-			catch (EofException&)
-			{
-				startWriting();
-				*fos << g_md5 << "\r\n";
-				return CacheState::New;
-			}
-			return CacheState::Found;
-		}
 	};
 
 	struct __StreamWithPad
@@ -236,6 +246,21 @@ namespace
 		}
 	};
 
+	struct DeferField
+	{
+		bool inited = false;
+		JsPropertyId typeIndex;
+		JsPropertyId index;
+		JsPropertyId size;
+		JsPropertyId flags;
+		JsPropertyId value;
+		JsPropertyId address;
+		JsPropertyId _register;
+		JsPropertyId scope;
+		JsPropertyId tag;
+		JsPropertyId name;
+	};
+	Deferred<DeferField> s_field(JsRuntime::initpack);
 }
 
 CachedPdb::CachedPdb() noexcept
@@ -275,42 +300,45 @@ TText16 CachedPdb::undecorate(Text16 text, int flags) noexcept {
 	return move(undecorated);
 }
 
-bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text16> text, Callback cb, void* param, bool quiet, bool overwrite) noexcept
+autoptr CachedPdb::getProcAddress(pcstr16 predefined, pcstr name) noexcept
 {
-	if (text.empty()) return true;
-
+	Text txname = (Text)name;
 	CsLock __lock = s_lock;
-	SymbolMap targets(predefined);
 
-	for (Text16 tx : text)
-	{
-		targets.put(tx);
-	}
+	SymbolCache targets(predefined);
+	void* foundptr = nullptr;
 
 	if (predefined != nullptr)
 	{
-		if (targets.file == nullptr)
-		{
-			if (!quiet) cout << "[BDSX] Failed to open " << (Utf16ToAnsi)(Text16)predefined << endl;
-			return false;
-		}
-
-		__StreamWithPad fis = _new io::FIStream<char, false>((File*)targets.file);
 		try
 		{
-			CacheState state = targets.checkMd5(fis, overwrite);
+			Must<io::FIStream<char, false>> fis = _new io::FIStream<char, false>((File*)targets.file);
+			CacheState state = targets.checkMd5(fis, false);
 			if (state == CacheState::New)
 			{
-				if (!quiet) cout << "[BDSX] Generating " << (Utf16ToAnsi)(Text16)predefined << endl;
+				cout << "[BDSX] Generating " << (Utf16ToAnsi)(Text16)predefined << endl;
 			}
 			else
 			{
+				TText16 name;
+				bool endWithLine = true;
 				for (;;)
 				{
-					TText16 name;
-					uintptr_t offset = targets.readOffset(fis, &name);
-					cb(name, targets.base + offset, param);
-					if (targets.empty()) return true;
+					auto line = fis->readLine();
+					if (!line.second) endWithLine = false;
+					pcstr equal = line.first.find_r('=');
+					if (equal == nullptr) continue;
+					if (line.first.cut(equal).trim() != txname) continue;
+					Text value = line.first.subarr(equal + 1).trim();
+
+					if (value.startsWith("0x"))
+					{
+						return targets.base + value.subarr(2).to_uintp(16);
+					}
+					else
+					{
+						return targets.base + value.to_uintp();
+					}
 				}
 			}
 		}
@@ -327,68 +355,46 @@ bool CachedPdb::getProcAddresses(pcstr16 predefined, View<Text16> text, Callback
 	// load from pdb
 	try
 	{
-		if (!quiet) cout << "[BDSX] PdbReader: Search Symbols..." << endl;
+		cout << "[BDSX] PdbReader: Search Symbols..." << endl;
 		if (m_pdb.base() == nullptr)
 		{
 			m_pdb.load();
 		}
 
-		struct Local
-		{
-			SymbolMap& targets;
-			void(*cb)(Text16 name, void* fnptr, void* param);
-			void* param;
-			bool quiet;
-		} local = { targets, cb, param, quiet };
+		TText line;
+		line << txname;
+		foundptr = m_pdb.getFunctionAddress(line.c_str());
+		line << " = 0x" << hexf((byte*)foundptr - (byte*)m_pdb.base());
+		cout << line << endl;
 
 		targets.startWriting();
-
-		m_pdb.search16(nullptr, [&local](Text16 name, void* address, uint32_t typeId) {
-			TText16 line;
-			Text16 nameWithIndex;
-			if (!local.targets.test(name, address, &line, &nameWithIndex)) return true;
-
-			if (!local.quiet) cout << (Utf16ToAnsi)line << endl;
-			local.cb(nameWithIndex, address, local.param);
-			return !local.targets.empty();
-			});
-		if (targets.fos != nullptr) targets.fos->flush();
+		*targets.fos << line << "\r\n";
+		targets.fos->flush();
 	}
 	catch (FunctionError& err)
 	{
-		if (!quiet)
+		cerr << err.getFunctionName() << ": failed, ";
 		{
-			cerr << err.getFunctionName() << ": failed, ";
-			{
-				TSZ tsz;
-				err.getMessageTo(&tsz);
-				cerr << tsz;
-			}
-			cerr << "(0x" << hexf(err.getErrorCode(), 8) << ')' << endl;
+			TSZ tsz;
+			err.getMessageTo(&tsz);
+			cerr << tsz;
 		}
+		cerr << "(0x" << hexf(err.getErrorCode(), 8) << ')' << endl;
 	}
 
-	if (!targets.empty())
+	if (foundptr == nullptr)
 	{
-		if (!quiet)
-		{
-			for (auto& item : targets.targets)
-			{
-				Text name = item.first;
-				cerr << name << " not found" << endl;
-			}
-		}
-		return false;
+		cerr << txname << " not found" << endl;
 	}
 
-	return true;
+	return foundptr;
 }
 JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue array, bool quiet, uint32_t undecorateOpts) throws(kr::JsException)
 {
 	int length = array.getArrayLength();
 	if (length == 0) return out;
 
-	if (!s_lock.tryEnter()) throw JsException(u"BUSY. It's using by async task");
+	if (!s_lock.tryEnter()) throw JsException(u"BUSY. It's using by the async task");
 	finally { s_lock.leave(); };
 
 	SymbolMap targets(predefined);
@@ -438,7 +444,22 @@ JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue arr
 	// load from pdb
 	try
 	{
-		if (!quiet) g_ctx->log(u"[BDSX] PdbReader: Search Symbols...");
+		if (!quiet)
+		{
+			size_t size = targets.targets.size();
+			if (size > 5)
+			{
+				g_ctx->log(TSZ16() << u"[BDSX] PdbReader: Cache not found, " << size << u" symbols");
+			}
+			else
+			{
+				for (auto& pair : targets.targets)
+				{
+					g_ctx->log(TSZ16() << u"[BDSX] PdbReader: Cache not found, " << (Text16)pair.first);
+				}
+			}
+			g_ctx->log(u"[BDSX] PdbReader: Search Symbols...");
+		}
 		if (m_pdb.base() == nullptr)
 		{
 			m_pdb.load();
@@ -450,6 +471,7 @@ JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue arr
 			bool quiet;
 			JsValue& out;
 			uint32_t undecorateOpts;
+			JsException exception;
 		} local = {targets, quiet, out, undecorateOpts };
 
 		targets.startWriting();
@@ -473,9 +495,21 @@ JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue arr
 			}
 			NativePointer* ptr = NativePointer::newInstance();
 			ptr->setAddressRaw(address);
-			local.out.set(JsValue(nameWithIndex), ptr);
-			return !local.targets.empty();
+			try
+			{
+				local.out.set(JsValue(nameWithIndex), ptr);
+				return !local.targets.empty();
+			}
+			catch (JsException& ex)
+			{
+				local.exception = move(ex);
+				return false;
+			}
 			});
+		if (!local.exception.isEmpty())
+		{
+			throw move(local.exception);
+		}
 		if (targets.fos != nullptr) targets.fos->flush();
 	}
 	catch (FunctionError& err)
@@ -543,11 +577,24 @@ void CachedPdb::search(JsValue masks, JsValue cb) throws(kr::JsException)
 			return;
 		}
 		}
+		JsException exception;
 		m_pdb.search(filterstr, [&](Text name, void* address, uint32_t typeId) {
 			NativePointer* ptr = NativePointer::newInstance();
 			ptr->setAddressRaw(address);
-			return cb(TText16() << (Utf8ToUtf16)name, ptr).cast<bool>();
+			try
+			{
+				return cb(TText16() << (Utf8ToUtf16)name, ptr).cast<bool>();
+			}
+			catch (JsException& ex)
+			{
+				exception = move(ex);
+				return false;
+			}
 			});
+		if (!exception.isEmpty())
+		{
+			throw move(exception);
+		}
 	}
 	catch (FunctionError& err)
 	{
@@ -573,12 +620,22 @@ JsValue CachedPdb::getAll(JsValue onprogress) throws(kr::JsException)
 			JsValue onprogress;
 			uintptr_t totalcount;
 			bool callback;
+			JsException exception;
 
-			void report() noexcept
+			bool report() noexcept
 			{
 				if (callback)
 				{
-					onprogress.call(totalcount);
+					try
+					{
+						JsValue res = onprogress.call(totalcount);
+						return res.getType() != JsType::Boolean || res.as<bool>();
+					}
+					catch (JsException& ex)
+					{
+						exception = move(ex);
+						return false;
+					}
 				}
 				else
 				{
@@ -586,6 +643,7 @@ JsValue CachedPdb::getAll(JsValue onprogress) throws(kr::JsException)
 					tsz << u"[BDSX] PdbReader: Get symbols (" << totalcount << u')';
 					g_ctx->log(tsz);
 				}
+				return true;
 			}
 		} local;
 		local.now = timepoint::now();
@@ -596,18 +654,18 @@ JsValue CachedPdb::getAll(JsValue onprogress) throws(kr::JsException)
 			local.onprogress = onprogress;
 			local.report();
 		}
-		m_pdb.getAll([&local](Text name, autoptr address, int typeId) {
+		m_pdb.getAll16([&local](Text16 name, autoptr address, int typeId) {
 			++local.totalcount;
 			timepoint newnow = timepoint::now();
-			if (newnow - local.now > 500_ms)
-			{
-				local.now = newnow;
-				local.report();
-			}
 
 			NativePointer* ptr = NativePointer::newInstance();
 			ptr->setAddressRaw(address);
 			local.out.set(name, ptr);
+			if (newnow - local.now > 500_ms)
+			{
+				local.now = newnow;
+				return local.report();
+			}
 			return true;
 			});
 
@@ -616,7 +674,108 @@ JsValue CachedPdb::getAll(JsValue onprogress) throws(kr::JsException)
 		{
 			g_ctx->log(TSZ16() << u"[BDSX] PdbReader: done (" << local.totalcount << u")");
 		}
+		else if (!local.exception.isEmpty())
+		{
+			throw move(local.exception);
+		}
 		return local.out;
+	}
+	catch (FunctionError& err)
+	{
+		throwAsJsException(err);
+	}
+}
+void CachedPdb::getAllEx(JsValue cb) throws(kr::JsException)
+{
+	try
+	{
+		if (cb.getType() != JsType::Function) throw kr::JsException(u"function required");
+		if (m_pdb.base() == nullptr)
+		{
+			m_pdb.load();
+		}
+
+		if (!s_field->inited)
+		{
+			s_field->inited = true;
+			s_field->typeIndex = JsPropertyId(u"typeIndex");
+			s_field->index = JsPropertyId(u"index");
+			s_field->size = JsPropertyId(u"size");
+			s_field->flags = JsPropertyId(u"flags");
+			s_field->value = JsPropertyId(u"value");
+			s_field->address = JsPropertyId(u"address");
+			s_field->_register = JsPropertyId(u"register");
+			s_field->scope = JsPropertyId(u"scope");
+			s_field->tag = JsPropertyId(u"tag");
+			s_field->name = JsPropertyId(u"name");
+		}
+
+		struct Local
+		{
+			JsValue out = JsNewArray();
+			timepoint now;
+			JsValue cb;
+			JsException exception;
+
+			bool callback;
+			int counter = 0;
+
+			bool flush() throws(JsException)
+			{
+				if (counter == 0) return true;
+				bool res = cb(out) != false;
+				out.setArrayLength(0);
+				counter = 0;
+				return res;
+			}
+		} local;
+		local.now = timepoint::now();
+		local.cb = cb;
+
+		m_pdb.getAllEx16([&local](Text16 name, SYMBOL_INFOW* info) {
+
+			JsValue tuple = JsNewObject;
+			tuple.set(s_field->typeIndex, (int)info->TypeIndex);
+			tuple.set(s_field->index, (int)info->Index);
+			tuple.set(s_field->size, (int)info->Size);
+			tuple.set(s_field->flags, (int)info->Flags);
+
+			NativePointer* value = NativePointer::newInstance();
+			value->setAddressRaw((void*)info->Value);
+			tuple.set(s_field->value, value);
+
+			NativePointer* addr = NativePointer::newInstance();
+			addr->setAddressRaw((void*)info->Address);
+			tuple.set(s_field->address, addr);
+
+			tuple.set(s_field->_register, (int)info->Register);
+			tuple.set(s_field->scope, (int)info->Scope);
+			tuple.set(s_field->tag, (int)info->Tag);
+			tuple.set(s_field->name, name);
+			local.out.set(local.counter++, tuple);
+
+			timepoint newnow = timepoint::now();
+			if (newnow - local.now > 100_ms)
+			{
+				local.now = newnow;
+				try
+				{
+					return local.flush();
+				}
+				catch (JsException& ex)
+				{
+					local.exception = move(ex);
+					return false;
+				}
+			}
+			return true;
+			});
+
+		if (!local.exception.isEmpty())
+		{
+			throw move(local.exception);
+		}
+		local.flush();
 	}
 	catch (FunctionError& err)
 	{
@@ -640,6 +799,7 @@ JsValue getPdbNamespace() noexcept
 		});
 	pdb.set(u"getList", getList);
 	pdb.setMethod(u"getAll", [](JsValue onprogress) { return g_pdb.getAll(onprogress); });
+	pdb.setMethod(u"getAllEx", [](JsValue onprogress) { return g_pdb.getAllEx(onprogress); });
 	return pdb;
 }
 
