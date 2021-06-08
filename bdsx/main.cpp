@@ -168,6 +168,7 @@ namespace
 		}
 		catch (ThrowAbort&)
 		{
+			_catch(param, "kr::ThrowAbort");
 		}
 		catch (std::exception& e)
 		{
@@ -396,6 +397,7 @@ void nodegate::initNativeModule(void* exports_raw) noexcept
 	}
 	s_globalScope.create();
 }
+
 void nodegate::clearNativeModule() noexcept
 {
 	s_globalScope.remove();

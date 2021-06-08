@@ -25,7 +25,9 @@ void* VoidPointer::getAddressRaw() noexcept
 }
 void* VoidPointer::getAddressRawSafe() noexcept
 {
-	if (this == nullptr) return nullptr;
+	if (this == nullptr) {
+		return nullptr;
+	}
 	return m_address;
 }
 int32_t VoidPointer::getAddressLow() noexcept
@@ -54,7 +56,7 @@ kr::JsValue VoidPointer::addressOfThis() noexcept
 
 bool VoidPointer::equals(VoidPointer* other) noexcept
 {
-	if (other == nullptr) return false;
+	if (other == nullptr) return m_address == nullptr;
 	return m_address == other->m_address;
 }
 NativePointer* VoidPointer::pointer() noexcept
@@ -171,7 +173,6 @@ void VoidPointer::initMethods(JsClassT<VoidPointer>* cls) noexcept
 	cls->setMethod(u"addBin", &VoidPointer::addBin);
 	cls->setMethod(u"subBin", &VoidPointer::subBin);
 	cls->setMethod(u"subptr", &VoidPointer::subptr);
-	cls->setMethod(u"clone", &VoidPointer::pointer);
 	
 	cls->setMethod(u"as", &VoidPointer::as);
 	cls->setMethod(u"addAs", &VoidPointer::addAs);
@@ -182,6 +183,48 @@ void VoidPointer::initMethods(JsClassT<VoidPointer>* cls) noexcept
 	cls->setMethod(u"isNull", &VoidPointer::isNull);
 	cls->setMethod(u"isNotNull", &VoidPointer::isNotNull);
 	cls->setMethod(u"toString", &VoidPointer::toString);
+
+	cls->setStaticMethodRaw(u"fromAddress", [](const JsArguments& args) {
+		JsValue instance = JsClass(args.getThis()).newInstanceRaw({});
+		VoidPointer* ptr = instance.getNativeObject<VoidPointer>();
+		if (ptr == nullptr) throw JsException(TSZ16() << instance.get(u"name").cast<Text16>() << u" is not *Pointer");
+
+		uint32_t low = args.at<int>(0);
+		uint32_t high = args.at<int>(1);
+		ptr->setAddressRaw((void*)(((uint64_t)high << 32) | low));
+		return instance;
+		});
+	cls->setStaticMethodRaw(u"fromAddressBin", [](const JsArguments& args) {
+		JsValue instance = JsClass(args.getThis()).newInstanceRaw({});
+		VoidPointer* ptr = instance.getNativeObject<VoidPointer>();
+		if (ptr == nullptr) throw JsException(TSZ16() << instance.get(u"name").cast<Text16>() << u" is not *Pointer");
+		ptr->setAddressRaw((void*)::getBin64(args.at<Text16>(0)));
+		return instance;
+		});
+	cls->setStaticMethodRaw(u"fromAddressBuffer", [](const JsArguments& args) {
+		JsValue instance = JsClass(args.getThis()).newInstanceRaw({});
+		VoidPointer* ptr = instance.getNativeObject<VoidPointer>();
+		if (ptr == nullptr) throw JsException(TSZ16() << instance.get(u"name").cast<Text16>() << u" is not *Pointer");
+		if (args.size() == 0) return instance;
+		Buffer buf = args[0].getBuffer();
+		if (buf == nullptr) return instance;
+		ptr->setAddressRaw(buf.data());
+		return instance;
+		});
+	cls->setStaticMethodRaw(u"fromAddressString", [](const JsArguments& args) {
+		JsValue instance = JsClass(args.getThis()).newInstanceRaw({});
+		VoidPointer* ptr = instance.getNativeObject<VoidPointer>();
+		if (ptr == nullptr) throw JsException(TSZ16() << instance.get(u"name").cast<Text16>() << u" is not *Pointer");
+		ptr->setAddressRaw(args.at<Text16>(0).data());
+		return instance;
+		});
+	cls->setStaticMethodRaw(u"fromAddressFloat", [](const JsArguments& args) {
+		JsValue instance = JsClass(args.getThis()).newInstanceRaw({});
+		VoidPointer* ptr = instance.getNativeObject<VoidPointer>();
+		if (ptr == nullptr) throw JsException(TSZ16() << instance.get(u"name").cast<Text16>() << u" is not *Pointer");
+		ptr->setAddressRaw((void*)(int64_t)args.at<double>(0));
+		return instance;
+		});
 }
 
 template <typename T>

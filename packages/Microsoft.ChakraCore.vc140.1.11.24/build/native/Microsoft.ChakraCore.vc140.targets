@@ -4,13 +4,10 @@
     <Link>
       <AdditionalDependencies Condition="'$(Configuration)' == 'Debug' And '$(Platform)' == 'arm'">$(MSBuildThisFileDirectory)..\..\lib\native\v140\arm\Debug\ChakraCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(Configuration)' == 'Release' And '$(Platform)' == 'arm'">$(MSBuildThisFileDirectory)..\..\lib\native\v140\arm\Release\ChakraCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(Configuration)' == 'ReleaseTest' And '$(Platform)' == 'arm'">$(MSBuildThisFileDirectory)..\..\lib\native\v140\arm\Release\ChakraCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(Configuration)' == 'Debug' And '$(Platform)' == 'x64'">$(MSBuildThisFileDirectory)..\..\lib\native\v140\x64\Debug\ChakraCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(Configuration)' == 'Release' And '$(Platform)' == 'x64'">$(MSBuildThisFileDirectory)..\..\lib\native\v140\x64\Release\ChakraCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(Configuration)' == 'ReleaseTest' And '$(Platform)' == 'x64'">$(MSBuildThisFileDirectory)..\..\lib\native\v140\x64\Release\ChakraCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(Configuration)' == 'Debug' And ('$(Platform)' == 'Win32' Or '$(Platform)' == 'x86')">$(MSBuildThisFileDirectory)..\..\lib\native\v140\x86\Debug\ChakraCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(Configuration)' == 'Release' And ('$(Platform)' == 'Win32' Or '$(Platform)' == 'x86')">$(MSBuildThisFileDirectory)..\..\lib\native\v140\x86\Release\ChakraCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(Configuration)' == 'ReleaseTest' And ('$(Platform)' == 'Win32' Or '$(Platform)' == 'x86')">$(MSBuildThisFileDirectory)..\..\lib\native\v140\x86\Release\ChakraCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ClCompile>
       <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -28,7 +25,7 @@
     <ReferenceCopyLocalPaths Include="$(MSBuildThisFileDirectory)..\..\lib\native\v140\x64\Debug\ChakraCore.dll" />
     <ReferenceCopyLocalPaths Include="$(MSBuildThisFileDirectory)..\..\lib\native\v140\x64\Debug\ChakraCore.pdb" />
   </ItemGroup>
-  <ItemGroup Condition="('$(Configuration)' == 'Release' or '$(Configuration)' == 'ReleaseTest') And '$(Platform)' == 'x64'">
+  <ItemGroup Condition="'$(Configuration)' == 'Release' And '$(Platform)' == 'x64'">
     <ReferenceCopyLocalPaths Include="$(MSBuildThisFileDirectory)..\..\lib\native\v140\x64\Release\ChakraCore.dll" />
     <ReferenceCopyLocalPaths Include="$(MSBuildThisFileDirectory)..\..\lib\native\v140\x64\Release\ChakraCore.pdb" />
   </ItemGroup>
@@ -36,7 +33,7 @@
     <ReferenceCopyLocalPaths Include="$(MSBuildThisFileDirectory)..\..\lib\native\v140\x86\Debug\ChakraCore.dll" />
     <ReferenceCopyLocalPaths Include="$(MSBuildThisFileDirectory)..\..\lib\native\v140\x86\Debug\ChakraCore.pdb" />
   </ItemGroup>
-  <ItemGroup Condition="('$(Configuration)' == 'Release' or '$(Configuration)' == 'ReleaseTest') And ('$(Platform)' == 'Win32' Or '$(Platform)' == 'x86')">
+  <ItemGroup Condition="'$(Configuration)' == 'Release' And ('$(Platform)' == 'Win32' Or '$(Platform)' == 'x86')">
     <ReferenceCopyLocalPaths Include="$(MSBuildThisFileDirectory)..\..\lib\native\v140\x86\Release\ChakraCore.dll" />
     <ReferenceCopyLocalPaths Include="$(MSBuildThisFileDirectory)..\..\lib\native\v140\x86\Release\ChakraCore.pdb" />
   </ItemGroup>

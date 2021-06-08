@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "sehandler.h"
 #include "voidpointer.h"
+#include "nativepointer.h"
 #include "nodegate.h"
 #include "jsctx.h"
 #include "unwind.h"
@@ -28,6 +29,7 @@ namespace
 		JsPersistent handler;
 		JsPropertyId nativeStack = JsPropertyId(u"nativeStack");
 		DWORD threadId;
+		ULONG_PTR exceptionInfos[EXCEPTION_MAXIMUM_PARAMETERS];
 
 		DeferField() noexcept
 		{
@@ -75,11 +77,11 @@ namespace
 		}
 		return u"[Unknown]";
 	}
-	bool addFunctionTable(VoidPointer* baseptr, int unwindcount, int fncount) throws(JsException)
+	bool addFunctionTable(VoidPointer* runtimeFunctionTable, int fncount, VoidPointer* baseptr) throws(JsException)
 	{
-		if (baseptr == nullptr) throw JsException(u"Invalid arguments");
 		DWORD64 base = (DWORD64)baseptr->getAddressRawSafe();
-		return RtlAddFunctionTable((RUNTIME_FUNCTION*)(base + unwindcount * sizeof(UNWIND_INFO)), fncount, base);
+		RUNTIME_FUNCTION* functionTable = (RUNTIME_FUNCTION*)runtimeFunctionTable->getAddressRawSafe();
+		return RtlAddFunctionTable(functionTable, fncount, base);
 	}
 }
 
@@ -165,12 +167,12 @@ ATTR_NORETURN void runtimeError::raise(EXCEPTION_POINTERS* exptr) noexcept
 
 			AText16 stack = getStack(exptr);
 			if (stack.endsWith('\n')) stack.pop();
-
 			CsLock lock = s_stackLock;
 			if (s_nativeErrorCode != 0) break;
 			s_nativeErrorCode = code;
 			s_threadId = threadId;
 			s_nativeExceptionStack << move(stack);
+			memcpy(s_field->exceptionInfos, exptr->ExceptionRecord->ExceptionInformation, sizeof(s_field->exceptionInfos));
 		}
 		catch (...)
 		{
@@ -230,6 +232,13 @@ kr::JsValue runtimeError::getError() noexcept
 		message << s_threadId;
 		message << u']';
 		err.set(u"stack", (Text16)message);
+	}
+	JsValue exceptionInfos = JsNewArray(EXCEPTION_MAXIMUM_PARAMETERS);
+	err.set(u"exceptionInfos", exceptionInfos);
+	for (size_t i = 0; i < EXCEPTION_MAXIMUM_PARAMETERS; i++) {
+		JsValue addr = NativePointer::newInstanceRaw({});
+		addr.getNativeObject<VoidPointer>()->setAddressRaw((void*)s_field->exceptionInfos[i]);
+		exceptionInfos.set((int)i, addr );
 	}
 	return err;
 }

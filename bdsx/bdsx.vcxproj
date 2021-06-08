@@ -69,7 +69,7 @@
     <TargetName>Chakra</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">
-    <LibraryPath>$(SolutionDir)node-chakracore\$(ConfigDir)\lib;$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(SolutionDir)node-chakracore\$(ConfigDir)\lib;$(SolutionDir)node-chakracore\$(ConfigDir);$(LibraryPath)</LibraryPath>
     <TargetName>Chakra</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -197,7 +197,7 @@ echo #define BUILD_TIME "%25date%-%time2:.=%"&gt;"gen/buildtime.h"</Command>
     <CustomBuild Include="version.bat">
       <FileType>Document</FileType>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">gen\version.h;$(SolutionDir)..\bdsx\bdsx\version-bdsx.json</Outputs>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">gen\version.h;$(SolutionDir)..\bdsx\bdsx\version.json</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">gen\version.h;$(SolutionDir)..\bdsx\bdsx\version-bdsx.json</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">gen\version.h;$(SolutionDir)..\bdsx\bdsx\version-bdsx.json</Outputs>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@call "%(Identity)"
 
