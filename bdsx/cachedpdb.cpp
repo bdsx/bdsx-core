@@ -318,6 +318,10 @@ autoptr CachedPdb::getProcAddress(pcstr16 predefined, pcstr name) noexcept
 			{
 				cout << "[BDSX] Generating " << (Utf16ToAnsi)(Text16)predefined << endl;
 			}
+			else if (state == CacheState::NotMatched)
+			{
+				return nullptr;
+			}
 			else
 			{
 				TText16 name;
@@ -414,9 +418,14 @@ JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue arr
 		{
 			Must<io::FIStream<char, false>> fis = _new io::FIStream<char, false>((File*)targets.file);
 
-			if (targets.checkMd5(fis, true) == CacheState::New)
+			CacheState state = targets.checkMd5(fis, true);
+			if (state == CacheState::New)
 			{
 				if (!quiet) g_ctx->log(TSZ16() << u"[BDSX] Generating " << predefined);
+			}
+			else if (state == CacheState::NotMatched)
+			{
+				// does nothing
 			}
 			else
 			{
