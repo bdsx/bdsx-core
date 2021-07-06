@@ -795,7 +795,6 @@ JsValue getPdbNamespace() noexcept
 {
 	JsValue pdb = JsNewObject;
 	pdb.set(u"coreCachePath", (Text16)CachedPdb::predefinedForCore);
-	pdb.setMethod(u"open", [] {});
 	pdb.setMethod(u"close", [] { return g_pdb.close(); });
 	pdb.setMethod(u"setOptions", [](int options) { return g_pdb.setOptions(options); });
 	pdb.setMethod(u"getOptions", []() { return g_pdb.getOptions(); });
