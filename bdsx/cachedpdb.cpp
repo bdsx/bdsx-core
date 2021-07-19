@@ -803,7 +803,7 @@ JsValue getPdbNamespace() noexcept
 	pdb.setMethod(u"getProcAddresses", [](JsValue out, JsValue array, bool quiet, bool undecorated) { return g_pdb.getProcAddresses(CachedPdb::predefinedForCore.data(), out, array, quiet, undecorated); });
 
 	JsValue getList = JsFunction::makeT([](Text16 predefined, JsValue out, JsValue array, bool quiet, JsValue undecorateOpts) {
-		return g_pdb.getProcAddresses(predefined.data(), out, array, quiet, undecorateOpts == undefined ? -1 : undecorateOpts.as<int>());
+		return g_pdb.getProcAddresses(predefined.data(), out, array, quiet, undecorateOpts.abstractEquals(nullptr) ? -1 : undecorateOpts.as<int>());
 		});
 	pdb.set(u"getList", getList);
 	pdb.setMethod(u"getAll", [](JsValue onprogress) { return g_pdb.getAll(onprogress); });

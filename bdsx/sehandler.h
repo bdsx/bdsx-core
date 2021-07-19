@@ -10,7 +10,7 @@ namespace runtimeError
 	ATTR_NORETURN void fire(JsValueRef error) noexcept;
 
 	kr::Text16 codeToString(unsigned int errorCode) noexcept;
-	kr::JsValue getError() noexcept;
+	kr::JsValue getError() throws(kr::JsException);
 	kr::JsValue getRuntimeErrorClass() noexcept;
 	kr::JsValue getNamespace() noexcept;
 }

@@ -144,7 +144,7 @@ bool VoidPointer::isNotNull() noexcept
 }
 TText16 VoidPointer::toString(JsValue radix) throws(JsException)
 {
-	if (radix == undefined)
+	if (radix.abstractEquals(nullptr))
 	{
 		TText16 out;
 		out << u"0x";

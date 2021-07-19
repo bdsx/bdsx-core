@@ -18,8 +18,8 @@ using namespace kr;
 namespace
 {
 	atomic<unsigned int> s_nativeErrorCode = 0;
-	unsigned int s_threadId = 0;
-	AText16 s_nativeExceptionStack;
+	unsigned int s_nativeExceptionThread = 0;
+	Array<StackInfo> s_nativeExceptionStack;
 	CriticalSection s_stackLock;
 
 	struct DeferField
@@ -27,7 +27,6 @@ namespace
 		JsPersistent runtimeErrorClass;
 		JsPersistent runtimeErrorAllocator;
 		JsPersistent handler;
-		JsPropertyId nativeStack = JsPropertyId(u"nativeStack");
 		DWORD threadId;
 		ULONG_PTR exceptionInfos[EXCEPTION_MAXIMUM_PARAMETERS];
 
@@ -55,31 +54,54 @@ namespace
 		}
 		catch (JsException& err)
 		{
-			g_ctx->error(err);
+			g_ctx->fireError(err);
 		}
 		terminate(-1);
 	}
 
-	AText16 getStack(EXCEPTION_POINTERS* exptr) noexcept
+	Array<StackInfo> getStack(EXCEPTION_POINTERS* exptr, HANDLE thread) noexcept
 	{
 		PdbReader::setOptions(0x00000002);
-		AText16 stack;
 		for (int i = 0; i < 3; i++)
 		{
-			StackWriter writer(exptr->ContextRecord);
-			stack << writer;
-			if (stack.empty())
+			Array<StackInfo> infos = getStackInfos(exptr->ContextRecord, thread);
+			if (infos.empty())
 			{
-				exptr->ContextRecord->Rsp += 0x10;
+				DWORD64 rsp = exptr->ContextRecord->Rsp;
+				exptr->ContextRecord->Rsp = (rsp % ~0xf) + 0x10;
 				continue;
 			}
-			return stack;
+			return infos;
 		}
-		return u"[Unknown]";
+		return nullptr;
 	}
-	bool addFunctionTable(VoidPointer* runtimeFunctionTable, int fncount, VoidPointer* baseptr) throws(JsException)
+	JsValue lookUpFunctionEntry(VoidPointer* address) throws(JsException) {
+		if (address == nullptr) return nullptr;
+		uintptr_t base = 0;
+		uintptr_t addr = (uintptr_t)address->getAddressRaw();
+		RUNTIME_FUNCTION* table = RtlLookupFunctionEntry(addr, &base, nullptr);
+		if (table != nullptr) {
+			JsValue out = JsNewArray(4);
+			out.set(0, VoidPointer::make((void*)base));
+			out.set(1, (int)table->BeginAddress);
+			out.set(2, (int)table->EndAddress);
+			out.set(3, (int)table->UnwindInfoAddress);
+			return out;
+		}
+		else if (base != 0) {
+			JsValue out = JsNewArray(1);
+			out.set(0, VoidPointer::make((void*)base));
+			return out;
+		}
+		else {
+			return nullptr;
+		}
+	}
+	bool addFunctionTable(VoidPointer* runtimeFunctionTable, int fncount, VoidPointer* baseptr) noexcept
 	{
-		DWORD64 base = (DWORD64)baseptr->getAddressRawSafe();
+		if (baseptr == nullptr) return false;
+		if (runtimeFunctionTable == nullptr) return false;
+		uintptr_t base = (uintptr_t)baseptr->getAddressRawSafe();
 		RUNTIME_FUNCTION* functionTable = (RUNTIME_FUNCTION*)runtimeFunctionTable->getAddressRawSafe();
 		return RtlAddFunctionTable(functionTable, fncount, base);
 	}
@@ -126,6 +148,7 @@ ATTR_NORETURN void runtimeError::raise(EXCEPTION_POINTERS* exptr) noexcept
 
 #ifndef NDEBUG
 	{
+		cout << "   [[DEBUG INFO]]" << endl;
 		DWORD64 rip = exptr->ContextRecord->Rip;
 		unsigned int code = exptr->ExceptionRecord->ExceptionCode;
 		cout << "ExceptionCode: 0x" << hexf(code, 8) << endl;
@@ -150,6 +173,7 @@ ATTR_NORETURN void runtimeError::raise(EXCEPTION_POINTERS* exptr) noexcept
 				cout << "rip RVA: [0x" << hexf((uintptr_t)mod) << "]+0x" << hexf(rip - (uintptr_t)mod) << endl;
 			}
 		}
+		cout << "   [[DEBUG INFO END]]" << endl;
 	}
 
 	if (requestDebugger())
@@ -165,20 +189,19 @@ ATTR_NORETURN void runtimeError::raise(EXCEPTION_POINTERS* exptr) noexcept
 			if (s_nativeErrorCode != 0) break;
 			unsigned int code = exptr->ExceptionRecord->ExceptionCode;
 
-			AText16 stack = getStack(exptr);
-			if (stack.endsWith('\n')) stack.pop();
+			Array<StackInfo> stack = getStack(exptr, GetCurrentThread());
 			CsLock lock = s_stackLock;
-			if (s_nativeErrorCode != 0) break;
-			s_nativeErrorCode = code;
-			s_threadId = threadId;
-			s_nativeExceptionStack << move(stack);
+			unsigned int expected = 0;
+			if (!s_nativeErrorCode.compare_exchange_strong(expected, code)) break;
+			s_nativeExceptionThread = threadId;
+			s_nativeExceptionStack = move(stack);
 			memcpy(s_field->exceptionInfos, exptr->ExceptionRecord->ExceptionInformation, sizeof(s_field->exceptionInfos));
 		}
 		catch (...)
 		{
 			CsLock lock = s_stackLock;
 			s_nativeErrorCode = -1;
-			s_nativeExceptionStack = u"[[setRuntimeException, Invalid EXCEPTION_POINTERS]]";
+			s_nativeExceptionStack = nullptr;
 		}
 		if (threadId == s_field->threadId)
 		{
@@ -209,27 +232,64 @@ void runtimeError::fire(JsValueRef error) noexcept
 	}
 	catch (JsException& err)
 	{
-		g_ctx->error(err);
+		g_ctx->fireError(err);
 	}
 	terminate(-1);
 }
-kr::JsValue runtimeError::getError() noexcept
+kr::JsValue runtimeError::getError() throws(JsException)
 {
 	CsLock lock = s_stackLock;
 	unsigned int code = s_nativeErrorCode;
 	if (code == 0) return nullptr;
 
+	JsValue catched;
+	try
+	{
+		JsExceptionCatcher catcher;
+	}
+	catch (JsException& cause)
+	{
+		catched = cause.getValue();
+	}
+
 	JsClass runtimeErrorAllocator = (JsValue)s_field->runtimeErrorAllocator;
 	TSZ16 message;
 	message << u"RuntimeError: " << codeToString(code) << u"(0x" << hexf(code, 8) << u')';
 	JsValue err = runtimeErrorAllocator.call((Text16)message);
+	if (!catched.isEmpty()) {
+		err.set(u"message", catched.get(u"message"));
+		err.set(u"stack", catched.get(u"stack"));
+	}
+
 	err.set(u"code", (int)code);
-	
-	err.set(s_field->nativeStack, s_nativeExceptionStack);
-	if (s_threadId != s_field->threadId)
+
+	JsPropertyId base = u"base";
+	JsPropertyId address = u"address";
+	JsPropertyId moduleName = u"moduleName";
+	JsPropertyId fileName = u"fileName";
+	JsPropertyId functionName = u"functionName";
+	JsPropertyId lineNumber = u"lineNumber";
+
+	size_t stackSize = s_nativeExceptionStack.size();
+	JsValue stack = JsNewArray(stackSize);
+	int i = 0;
+	for (StackInfo& info : s_nativeExceptionStack) {
+		JsValue obj = JsNewObject;
+		obj.set(base, info.base == nullptr ? (JsValue)nullptr : NativePointer::make(info.base));
+		obj.set(address, NativePointer::make(info.address));
+		obj.set(moduleName, info.moduleName == nullptr ? (JsValue)nullptr : (JsValue)(Text16)info.moduleName);
+		obj.set(fileName, info.filename == nullptr ? (JsValue)nullptr : (JsValue)(Text16)info.filename);
+		obj.set(functionName, info.function == nullptr ? (JsValue)nullptr : (JsValue)(Text)info.function);
+		obj.set(lineNumber, (int)info.line);
+		stack.set(i++, obj);
+	}
+
+	err.set(u"nativeStack", stack);
+
+	if (s_nativeExceptionThread != s_field->threadId)
 	{
 		message << u"\n[thread: ";
-		message << s_threadId;
+		message << s_nativeExceptionThread;
 		message << u']';
 		err.set(u"stack", (Text16)message);
 	}
@@ -254,6 +314,7 @@ kr::JsValue runtimeError::getNamespace() noexcept
 	runtimeError.set(u"raise", VoidPointer::make(raise));
 	runtimeError.setMethod(u"setHandler", setHandler);
 	runtimeError.set(u"fire", VoidPointer::make(fire));
+	runtimeError.setMethod(u"lookUpFunctionEntry", lookUpFunctionEntry);
 	runtimeError.setMethod(u"addFunctionTable", addFunctionTable);
 	return runtimeError;
 }

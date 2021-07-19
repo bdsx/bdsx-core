@@ -191,7 +191,7 @@ JsValue NativePointer::readString(JsValue bytes, int encoding) throws(JsExceptio
 		{
 			TText16 text;
 			Text src;
-			if (bytes == undefined)
+			if (bytes.abstractEquals(nullptr))
 			{
 				byte* end = mem::find(m_address, '\0');
 				src = Text((char*)m_address, (char*)end);
@@ -293,8 +293,7 @@ void NativePointer::writeFloat64(double v) throws(JsException)
 }
 void NativePointer::writePointer(StaticPointer* v) throws(JsException)
 {
-	if (v == nullptr) throw JsException(u"argument must be *Pointer");
-	_writeas(v->getAddressRaw());
+	_writeas(v != nullptr ? nullptr : v->getAddressRaw());
 }
 void NativePointer::writeString(JsValue buffer, int encoding) throws(JsException)
 {
@@ -703,4 +702,11 @@ void NativePointer::_writeas(T value) throws(JsException)
 	{
 		accessViolation(m_address);
 	}
+}
+
+NativePointer* NativePointer::make(void* value) noexcept
+{
+	NativePointer* ptr = NativePointer::newInstance();
+	ptr->setAddressRaw(value);
+	return ptr;
 }

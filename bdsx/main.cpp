@@ -212,75 +212,10 @@ namespace
 
 	namespace stackutil
 	{
-		uintptr_t last_allocate = 1;
-		void* stack_alloc(size_t size) noexcept
-		{
-			StackAllocator* alloc = StackAllocator::getInstance();
-			void* p = alloc->allocate(8 + size);
-			*(uintptr_t*)p = last_allocate;
-			last_allocate = (uintptr_t)p;
-			return (byte*)p + 8;
-		}
-		void stack_free_all() noexcept
-		{
-			uintptr_t p = last_allocate;
-			if (p & 1) return;
-
-			StackAllocator* alloc = StackAllocator::getInstance();
-			for (;;)
-			{
-				void* orip = (void*)(p & ~1);
-				p = *(uintptr_t*)orip;
-				alloc->free(orip);
-				if (p & 1)
-				{
-					last_allocate = p;
-					break;
-				}
-			}
-		}
-
-		char* to_ansi(const char16_t* str, size_t size, size_t* size_out) noexcept
-		{
-			Utf16ToAnsi dec = Text16(str, size);
-			size_t outsize = dec.size();
-			if (size_out != nullptr) *size_out = outsize;
-			char* out = (char*)stack_alloc(outsize + 1);
-			dec.copyTo(out);
-			out[outsize] = '\0';
-			return out;
-		}
-
-		char* to_utf8(const char16_t* str, size_t size, size_t* size_out) noexcept
-		{
-			Utf16ToUtf8 dec = Text16(str, size);
-			size_t outsize = dec.size();
-			if (size_out != nullptr) *size_out = outsize;
-			char* out = (char*)stack_alloc(outsize + 1);
-			dec.copyTo(out);
-			out[outsize] = '\0';
-			return out;
-		}
-
 		void* pointer_js2class(JsValueRef value) noexcept
 		{
 			return JsValue((JsRawData)value).getNativeObject<VoidPointer>();
 		}
-
-		JsErrorCode from_ansi(pcstr str, pcstr str_end, JsValueRef* out) noexcept
-		{
-			TSZ16 buf;
-			buf << (AnsiToUtf16)(Text)Text(str, str_end == nullptr ? str+strlen(str) : str_end);
-			return JsPointerToString(wide(buf.data()), buf.size(), out);
-		}
-
-		JsErrorCode from_utf8(pcstr str, pcstr str_end, JsValueRef* out) noexcept
-		{
-			TSZ16 buf;
-			buf << (AnsiToUtf16)(Text)Text(str, str_end == nullptr ? str + strlen(str) : str_end);
-			return JsPointerToString(wide(buf.data()), buf.size(), out);
-		}
-
 	}
 }
 
@@ -343,13 +278,6 @@ void nodegate::initNativeModule(void* exports_raw) noexcept
 			JsValue chakraUtil = JsNewObject;
 			exports.set(u"chakraUtil", chakraUtil);
 
-			chakraUtil.set(u"stack_alloc", VoidPointer::make(stackutil::stack_alloc));
-			chakraUtil.set(u"stack_free_all", VoidPointer::make(stackutil::stack_free_all));
-			chakraUtil.set(u"stack_ptr", VoidPointer::make(&stackutil::last_allocate));
-			chakraUtil.set(u"stack_utf8", VoidPointer::make(stackutil::to_utf8));
-			chakraUtil.set(u"stack_ansi", VoidPointer::make(stackutil::to_ansi));
-			chakraUtil.set(u"from_utf8", VoidPointer::make(stackutil::from_utf8));
-			chakraUtil.set(u"from_ansi", VoidPointer::make(stackutil::from_ansi));
 			chakraUtil.set(u"pointer_js2class", VoidPointer::make(stackutil::pointer_js2class));
 			chakraUtil.setMethodRaw(u"JsCreateFunction", [](const JsArguments& args)->JsValue {
 				VoidPointer* fnptr = args.at<VoidPointer*>(0);

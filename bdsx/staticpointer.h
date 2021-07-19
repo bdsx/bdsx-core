@@ -49,6 +49,8 @@ public:
 	int setString(kr::JsValue buffer, int offset, int encoding) throws(kr::JsException);
 	void setBuffer(kr::JsValue buffer, int offset) throws(kr::JsException);
 	void setCxxString(kr::Text16 text, int offset, int encoding) throws(kr::JsException);
+	void setInt32To64WithZero(int32_t v, int offset) throws(kr::JsException);
+	void setFloat32To64WithZero(double v, int offset) throws(kr::JsException);
 
 	int interlockedIncrement16(int offset) throws(kr::JsException);
 	int interlockedIncrement32(int offset) throws(kr::JsException);

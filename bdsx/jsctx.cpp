@@ -85,12 +85,24 @@ void MainContext::error(kr::Text16 tx) noexcept
 		cerr << (Utf16ToAnsi)err.toString() << endl;
 	}
 }
-void MainContext::error(const kr::JsException& err) noexcept
+void MainContext::fireError(const kr::JsRawData& err) noexcept
 {
 	try
 	{
-		JsValue stack = err.getValue().get(u"stack");
-		if (stack == undefined) stack = err.toString();
+		JsValue onError = m_onError;
+		if (!onError.isEmpty()) {
+			onError(err);
+		}
+		return;
+	}
+	catch (JsException&)
+	{
+	}
+
+	try
+	{
+		JsValue stack = err.getByProperty(u"stack");
+		if (stack.abstractEquals(nullptr)) stack = err.toString();
 		g_ctx->error(stack.cast<Text16>());
 	}
 	catch (JsException& err)
@@ -102,6 +114,21 @@ void MainContext::error(const kr::JsException& err) noexcept
 		cerr << "[Error in error]" << endl;
 	}
 }
+void MainContext::fireError(const kr::JsException& err) noexcept
+{
+	fireError(err.getValue());
+}
+JsValue MainContext::setOnError(const JsValue& onError) noexcept {
+	JsValue old = (JsValue)(m_onError);
+	m_onError = onError;
+	return old;
+}
+JsValue MainContext::getOnError() noexcept {
+	return m_onError;
+}
+void MainContext::catchException() noexcept {
+	nodegate::catchException();
+}
 void MainContext::_tickCallback() noexcept
 {
 	try
@@ -110,7 +137,7 @@ void MainContext::_tickCallback() noexcept
 	}
 	catch (JsException& err)
 	{
-		error(err);
+		fireError(err);
 	}
 }
 
@@ -124,21 +151,8 @@ void nodegate::_tickCallback() noexcept
 {
 	g_ctx->_tickCallback();
 }
-void nodegate::error(JsValueRef err) noexcept
+void nodegate::fireError(JsValueRef err) noexcept
 {
-	try
-	{
-		JsValue jserr((JsRawData)err);
-		JsValue stack = jserr.get(u"stack");
-		if (stack == undefined) stack = jserr.toString();
-		g_ctx->error(stack.cast<Text16>());
-	}
-	catch (JsException& err)
-	{
-		cerr << (Utf16ToAnsi)err.toString() << endl;
-	}
-	catch (...)
-	{
-		cerr << "[Error in error]" << endl;
-	}
+	JsValue jserr((JsRawData)err);
+	g_ctx->fireError(jserr);
 }

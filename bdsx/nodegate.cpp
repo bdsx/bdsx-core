@@ -61,18 +61,6 @@ namespace
         nodegate::initNativeModule(*exports);
         atexit(clear);
     }
-
-    void codeCheckPost() noexcept
-    {
-        JsValueRef exception;
-        JsErrorCode err = JsGetAndClearException(&exception);
-        if (err == JsNoError)
-        {
-            nodegate::error(exception);
-        }
-        nodegate::_tickCallback();
-    }
-
 }
 NODE_MODULE_CONTEXT_AWARE(bdsx_core, init);
 
@@ -148,6 +136,16 @@ void nodegate::loop(uint64_t hd_point) noexcept
         if (awakeTimer.done) break;
     }
 }
+void nodegate::catchException() noexcept
+{
+    JsValueRef exception;
+    JsErrorCode err = JsGetAndClearException(&exception);
+    if (err == JsNoError)
+    {
+        fireError(exception);
+    }
+    nodegate::_tickCallback();
+}
 
 #include <typeinfo>
 
@@ -191,13 +189,14 @@ void AsyncTask::open() noexcept
                     task->fn(task);
                     task->release();
                     s_checkAsyncInAsync = false;
-                    codeCheckPost();
+                    nodegate::catchException();
                 }
                 else
                 {
                     task->fn(task);
+
                     task->release();
-                    codeCheckPost();
+                    nodegate::catchException();
                     break;
                 }
             }

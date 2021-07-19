@@ -59,7 +59,7 @@ namespace
 			}
 			catch (JsException& err)
 			{
-				g_ctx->error(err);
+				g_ctx->fireError(err);
 			}
 		}), m_ip(ip)
 		{

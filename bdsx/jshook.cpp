@@ -1,11 +1,14 @@
 #include "stdafx.h"
 #include "jshook.h"
 #include "jsctx.h"
+#include "voidpointer.h"
+#include "nodegate.h"
 
 #include <KRWin/hook.h>
 #include <KRWin/handle.h>
 #include <KR3/util/wide.h>
 #include <KR3/parser/jsonparser.h>
+#include <memory>
 
 #define USE_EDGEMODE_JSRT
 #include <jsrt.h>
@@ -16,32 +19,9 @@ namespace
 {
 	struct DeferField
 	{
-		JsPersistent onError;
 		Map<Text, AText> uuidToPackPath;
 	};
 	Deferred<DeferField> s_field(JsRuntime::initpack);
-
-	void fireError(JsRawData err) noexcept
-	{
-		try
-		{
-			JsValue onError = s_field->onError;
-			onError(err);
-		}
-		catch (JsException& err)
-		{
-			g_ctx->error(err);
-		}
-	}
-	void catchException() noexcept
-	{
-		JsValueRef exception;
-		if (JsGetAndClearException(&exception) == JsNoError)
-		{
-			JsScope scope;
-			fireError((JsRawData)exception);
-		}
-	}
 
 	JsErrorCode CALLBACK JsCreateRuntimeHook(
 		JsRuntimeAttributes attributes,
@@ -112,7 +92,7 @@ namespace
 					}
 					catch (JsException& e)
 					{
-						fireError(e.getValue());
+						g_ctx->fireError(e.getValue());
 					}
 
 					g_ctx->_tickCallback();
@@ -123,7 +103,8 @@ namespace
 			}
 		}
 		JsErrorCode err = JsRunScript(script, sourceContext, sourceUrl, result);
-		if (err != JsNoError) catchException();
+		if (err != JsNoError) g_ctx->catchException();
+
 		{
 			JsScope _scope;
 
@@ -138,7 +119,7 @@ namespace
 		JsValueRef* result) noexcept
 	{
 		JsErrorCode err = JsCallFunction(function, arguments, argumentCount, result);
-		if (err != JsNoError) catchException();
+		if (err != JsNoError) g_ctx->catchException();
 
 		g_ctx->_tickCallback();
 		return err;
@@ -167,10 +148,11 @@ namespace
 		return JsNoError;
 	}
 
-	void init(kr::JsValue onError) noexcept
+	void init(JsValue onError) noexcept
 	{
-		s_field->onError = onError;
-
+		if (!onError.abstractEquals(nullptr)) {
+			g_ctx->setOnError(onError);
+		}
 		kr::hook::IATModule chakra(win::Module::current(), "chakra.dll");
 		chakra.hooking("JsCreateContext", JsCreateContextHook);
 		chakra.hooking("JsSetCurrentContext", JsSetCurrentContextHook);
@@ -184,20 +166,15 @@ namespace
 		chakra.hooking("JsSetProperty", JsSetPropertyHook);
 	#endif
 	}
-
 }
-
 
 JsValue getJsHookNamespace() noexcept
 {
 	JsValue jshook = JsNewObject;
 	jshook.setMethod(u"init", init);
-	jshook.setMethod(u"setOnError", [](JsValue onError) { 
-		JsValue old = (JsValue)(s_field->onError);
-		s_field->onError = onError;
-		return old;
-		});
-	jshook.setMethod(u"getOnError", [] { return (JsValue)s_field->onError; });
-	jshook.setMethod(u"fireError", fireError);
+	jshook.setMethod(u"setOnError", [](JsValue onError) { return g_ctx->setOnError(onError); });
+	jshook.setMethod(u"getOnError", [] { return g_ctx->getOnError(); });
+	jshook.setMethod(u"fireError", [](JsRawData err) { return g_ctx->fireError(err);  });
+	jshook.set(u"fireErrorPointer", VoidPointer::make(nodegate::fireError));
 	return jshook;
 }

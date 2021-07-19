@@ -2,7 +2,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.30711.63
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{6EAAC25C-870D-46AD-B6CD-FCC6AED10026}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "(Solution Items", "(Solution Items", "{6EAAC25C-870D-46AD-B6CD-FCC6AED10026}"
 	ProjectSection(SolutionItems) = preProject
 		packages\Microsoft.ChakraCore.vc140.1.11.24\build\native\Microsoft.ChakraCore.vc140.targets = packages\Microsoft.ChakraCore.vc140.1.11.24\build\native\Microsoft.ChakraCore.vc140.targets
 		README.md = README.md

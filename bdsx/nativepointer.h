@@ -73,6 +73,7 @@ public:
 	void writeJsValueRef(kr::JsValue v) throws(kr::JsException);
 
 	static void initMethods(kr::JsClassT<NativePointer>* cls) noexcept;
+	static NativePointer* make(void* value) noexcept;
 
 
 private:

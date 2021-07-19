@@ -171,7 +171,7 @@ JsValue StaticPointer::getString(JsValue bytes, int offset, int encoding) throws
 		pstr16 str = (pstr16)(m_address + offset);
 		try
 		{
-			if (bytes == undefined)
+			if (bytes.abstractEquals(nullptr))
 			{
 				return Text16(str, mem16::find(str, '\0'));
 			}
@@ -196,7 +196,7 @@ JsValue StaticPointer::getString(JsValue bytes, int offset, int encoding) throws
 		{
 			TText16 text;
 			Text src;
-			if (bytes == undefined)
+			if (bytes.abstractEquals(nullptr))
 			{
 				src = Text(str, mem::find(str, '\0'));
 			}
@@ -408,6 +408,23 @@ void StaticPointer::setCxxString(Text16 text, int offset, int encoding) throws(J
 		accessViolation(str);
 	}
 }
+void StaticPointer::setInt32To64WithZero(int32_t v, int offset) throws(kr::JsException)
+{
+	return _setas((uint64_t)(uint32_t)v, offset);
+}
+void StaticPointer::setFloat32To64WithZero(double v, int offset) throws(kr::JsException) {
+	byte* p = m_address + offset;
+	try
+	{
+		*(Unaligned<float>*)(p) = (float)v;
+		p += 4;
+		*(Unaligned<uint32_t>*)(p) = 0;
+	}
+	catch (...)
+	{
+		accessViolation(p);
+	}
+}
 
 JsValue StaticPointer::getBin(int words, int offset) throws(kr::JsException)
 {
@@ -614,6 +631,9 @@ void StaticPointer::initMethods(JsClassT<StaticPointer>* cls) noexcept
 	cls->setMethod(u"setString", &StaticPointer::setString);
 	cls->setMethod(u"setBuffer", &StaticPointer::setBuffer);
 	cls->setMethod(u"setCxxString", &StaticPointer::setCxxString);
+	cls->setMethod(u"setInt32To64WithZero", &StaticPointer::setInt32To64WithZero);
+	cls->setMethod(u"setFloat32To64WithZero", &StaticPointer::setFloat32To64WithZero);
+	cls->setMethod(u"setFloat32", &StaticPointer::setFloat32);
 
 	cls->setMethod(u"interlockedIncrement16", &StaticPointer::interlockedIncrement16);
 	cls->setMethod(u"interlockedIncrement32", &StaticPointer::interlockedIncrement32);
@@ -678,4 +698,45 @@ JsObject* AllocatedPointer::_allocate(const JsArguments& args) throws(JsExceptio
 }
 void AllocatedPointer::initMethods(kr::JsClassT<AllocatedPointer>* cls) noexcept
 {
+	cls->setStaticMethod(u"fromString", [](JsValue buffer, int encoding) {
+		if (encoding == ExEncoding::UTF16)
+		{
+			Text16 text = buffer.cast<Text16>();
+			size_t bytes = text.bytes();
+			JsValue allocated = AllocatedPointer::newInstanceRaw({ JsValue(bytes + 2) });
+			AllocatedPointer* ptr = allocated.getNativeObject<AllocatedPointer>();
+			pstr16 str = (pstr16)ptr->getAddressRaw();
+			memcpy(str, text.data(), bytes + sizeof(char16_t));
+			return allocated;
+		}
+		else if (encoding == ExEncoding::BUFFER)
+		{
+			Buffer buf = buffer.getBuffer();
+			if (buf == nullptr) throw JsException(u"argument must be buffer");
+			size_t size = buf.size();
+			JsValue allocated = AllocatedPointer::newInstanceRaw({ JsValue(size + 1) });
+			AllocatedPointer* ptr = allocated.getNativeObject<AllocatedPointer>();
+			void* p = ptr->getAddressRaw();
+			memcpy(p, buf.data(), size);
+			((char*)p)[size] = '\0';
+			return allocated;
+		}
+		else
+		{
+			Text16 text = buffer.cast<Text16>();
+			TSZ mb;
+			Charset cs = (Charset)encoding;
+			CHARSET_CONSTLIZE(cs,
+				mb << Utf16ToMultiByte<cs>(text);
+			);
+
+			size_t size = mb.size();
+			JsValue allocated = AllocatedPointer::newInstanceRaw({ JsValue(size + 1) });
+			AllocatedPointer* ptr = allocated.getNativeObject<AllocatedPointer>();
+			pstr str = (pstr)ptr->getAddressRaw();
+			memcpy(str, mb.data(), size);
+			str[size] = '\0';
+			return allocated;
+		}
+	});
 }
