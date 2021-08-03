@@ -12,7 +12,7 @@ public:
 
 	NativePointer(const kr::JsArguments& args) noexcept;
 
-	void move(int32_t lowBits, int32_t highBits) noexcept;
+	void move(int32_t lowBits, kr::JsValue highBits) noexcept;
 	void setAddressPointer(VoidPointer* ptr) noexcept;
 	void setAddress(int32_t lowBits, int32_t highBits) noexcept;
 	void setAddressFromBuffer(kr::JsValue buffer) throws(kr::JsException);

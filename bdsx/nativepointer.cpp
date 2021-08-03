@@ -75,9 +75,9 @@ void NativePointer::initMethods(JsClassT<NativePointer>* cls) noexcept
 	cls->setMethod(u"writeJsValueRef", &NativePointer::writeJsValueRef);
 }
 
-void NativePointer::move(int32_t lowBits, int32_t highBits) noexcept
+void NativePointer::move(int32_t lowBits, JsValue highBits) noexcept
 {
-	m_address += (intptr_t)makeqword(lowBits, highBits);
+	m_address += (intptr_t)make64(lowBits, highBits);
 }
 void NativePointer::setAddressPointer(VoidPointer* ptr) noexcept
 {

@@ -23,18 +23,19 @@ public:
 
 	bool equals(VoidPointer* other) noexcept;
 	NativePointer* pointer() noexcept;
-	NativePointer* add(int32_t lowBits, int32_t highBits) noexcept;
-	NativePointer* sub(int32_t lowBits, int32_t highBits) noexcept;
+	NativePointer* add(int32_t lowBits, kr::JsValue highBits) noexcept;
+	NativePointer* sub(int32_t lowBits, kr::JsValue highBits) noexcept;
 	NativePointer* addBin(kr::Text16 bin64) throws(JsException);
 	NativePointer* subBin(kr::Text16 bin64) throws(JsException);
 	int32_t subptr(VoidPointer* ptr) throws(JsException);
 	
 	kr::JsValue as(kr::JsValue cls) throws(JsException);
-	kr::JsValue addAs(kr::JsValue cls, int32_t lowBits, int32_t highBits) throws(JsException);
-	kr::JsValue subAs(kr::JsValue cls, int32_t lowBits, int32_t highBits) throws(JsException);
+	kr::JsValue addAs(kr::JsValue cls, int32_t lowBits, kr::JsValue highBits) throws(JsException);
+	kr::JsValue subAs(kr::JsValue cls, int32_t lowBits, kr::JsValue highBits) throws(JsException);
 	kr::JsValue addBinAs(kr::JsValue cls, kr::Text16 bin64) throws(JsException);
 	kr::JsValue subBinAs(kr::JsValue cls, kr::Text16 bin64) throws(JsException);
 
+	static int64_t make64(int32_t lowBits, kr::JsValue highBits) throws(JsException);
 	bool isNull() noexcept;
 	bool isNotNull() noexcept;
 

@@ -25,6 +25,26 @@ struct Ucrtbase
 namespace
 {
 	Ucrtbase ucrtbase;
+
+	void* allocate16(size_t size) noexcept {
+		if (size >= 0x1000) {
+			uintptr_t res = (uintptr_t)ucrtbase.malloc(size+0x27);
+			if (res == 0) return nullptr;
+			void** out = (void**)((res + 0x27) & (~0x1f));
+			out[-1] = (void*)res;
+			return out;
+		}
+		else {
+			return ucrtbase.malloc(size);
+		}
+	}
+
+	void free16(void* p, size_t size) noexcept {
+		if (size >= 0x1000) {
+			p = ((void**)p)[-1];
+		}
+		ucrtbase.free(p);
+	}
 }
 
 struct String
@@ -48,9 +68,9 @@ struct String
 		char* dest;
 		if (nsize > capacity)
 		{
-			if (capacity >= 0x10) ucrtbase.free(pointer);
+			if (capacity >= 0x10) free16(pointer, capacity);
 			capacity = nsize;
-			dest = pointer = (char*)ucrtbase.malloc(nsize + 1);
+			dest = pointer = (char*)allocate16(nsize + 1);
 			if (dest == nullptr)
 			{
 				memcpy(buffer, "[out of memory]", 16);

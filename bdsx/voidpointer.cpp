@@ -63,16 +63,16 @@ NativePointer* VoidPointer::pointer() noexcept
 {
 	return NativePointer::newInstance(this);
 }
-NativePointer* VoidPointer::add(int32_t lowBits, int32_t highBits) noexcept
+NativePointer* VoidPointer::add(int32_t lowBits, kr::JsValue highBits) noexcept
 {
 	NativePointer* ptr = NativePointer::newInstance(this);
-	ptr->m_address = m_address + (intptr_t)makeqword(lowBits, highBits);
+	ptr->m_address = m_address + make64(lowBits, highBits);
 	return ptr;
 }
-NativePointer* VoidPointer::sub(int32_t lowBits, int32_t highBits) noexcept
+NativePointer* VoidPointer::sub(int32_t lowBits, kr::JsValue highBits) noexcept
 {
 	NativePointer* ptr = NativePointer::newInstance(this);
-	ptr->m_address = m_address - (intptr_t)makeqword(lowBits, highBits);
+	ptr->m_address = m_address - make64(lowBits, highBits);
 	return ptr;
 }
 NativePointer* VoidPointer::addBin(kr::Text16 bin64) throws(JsException)
@@ -101,20 +101,20 @@ JsValue VoidPointer::as(JsValue cls) throws(JsException)
 	vptr->setAddressRaw(m_address);
 	return ptr;
 }
-JsValue VoidPointer::addAs(JsValue cls, int32_t lowBits, int32_t highBits) throws(JsException)
+JsValue VoidPointer::addAs(JsValue cls, int32_t lowBits, kr::JsValue highBits) throws(JsException)
 {
 	JsValue ptr = ((JsClass)cls).newInstanceRaw({});
 	VoidPointer* vptr = ptr.getNativeObject<VoidPointer>();
 	if (vptr == nullptr) throw JsException(u"*Pointer class required");
-	vptr->setAddressRaw(m_address + (((uint64_t)highBits << 32) | (uint64_t)lowBits ));
+	vptr->setAddressRaw(m_address + make64(lowBits, highBits));
 	return vptr;
 }
-JsValue VoidPointer::subAs(JsValue cls, int32_t lowBits, int32_t highBits) throws(JsException)
+JsValue VoidPointer::subAs(JsValue cls, int32_t lowBits, kr::JsValue highBits) throws(JsException)
 {
 	JsValue ptr = ((JsClass)cls).newInstanceRaw({});
 	VoidPointer* vptr = ptr.getNativeObject<VoidPointer>();
 	if (vptr == nullptr) throw JsException(u"*Pointer class required");
-	vptr->setAddressRaw(m_address - (((uint64_t)highBits << 32) | (uint64_t)lowBits));
+	vptr->setAddressRaw(m_address - make64(lowBits, highBits));
 	return vptr;
 }
 JsValue VoidPointer::addBinAs(JsValue cls, Text16 bin64) throws(JsException)
@@ -134,6 +134,14 @@ JsValue VoidPointer::subBinAs(JsValue cls, Text16 bin64) throws(JsException)
 	return vptr;
 }
 
+int64_t VoidPointer::make64(int32_t lowBits, kr::JsValue highBits) throws(JsException) {
+	if (highBits.abstractEquals(nullptr)) {
+		return lowBits;
+	}
+	else {
+		return (uint64_t)(uint32_t)lowBits | ((uint64_t)(uint32_t)highBits.as<int32_t>() << 32);
+	}
+}
 bool VoidPointer::isNull() noexcept
 {
 	return m_address == nullptr;
