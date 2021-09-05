@@ -62,16 +62,20 @@ namespace
 	Array<StackInfo> getStack(EXCEPTION_POINTERS* exptr, HANDLE thread) noexcept
 	{
 		PdbReader::setOptions(0x00000002);
-		for (int i = 0; i < 3; i++)
-		{
-			Array<StackInfo> infos = getStackInfos(exptr->ContextRecord, thread);
-			if (infos.empty())
+		try {
+			for (int i = 0; i < 3; i++)
 			{
-				DWORD64 rsp = exptr->ContextRecord->Rsp;
-				exptr->ContextRecord->Rsp = (rsp % ~0xf) + 0x10;
-				continue;
+				Array<StackInfo> infos = getStackInfos(exptr->ContextRecord, thread);
+				if (infos.empty())
+				{
+					DWORD64 rsp = exptr->ContextRecord->Rsp;
+					exptr->ContextRecord->Rsp = (rsp % ~0xf) + 0x10;
+					continue;
+				}
+				return infos;
 			}
-			return infos;
+		}
+		catch (...) {
 		}
 		return nullptr;
 	}
@@ -182,36 +186,35 @@ ATTR_NORETURN void runtimeError::raise(EXCEPTION_POINTERS* exptr) noexcept
 	}
 #endif
 
-	for (;;)
+	try
 	{
-		try
-		{
-			if (s_nativeErrorCode != 0) break;
-			unsigned int code = exptr->ExceptionRecord->ExceptionCode;
+		if (s_nativeErrorCode != 0) goto _already;
+		unsigned int code = exptr->ExceptionRecord->ExceptionCode;
 
-			Array<StackInfo> stack = getStack(exptr, GetCurrentThread());
-			CsLock lock = s_stackLock;
-			unsigned int expected = 0;
-			if (!s_nativeErrorCode.compare_exchange_strong(expected, code)) break;
-			s_nativeExceptionThread = threadId;
-			s_nativeExceptionStack = move(stack);
-			memcpy(s_field->exceptionInfos, exptr->ExceptionRecord->ExceptionInformation, sizeof(s_field->exceptionInfos));
-		}
-		catch (...)
-		{
-			CsLock lock = s_stackLock;
-			s_nativeErrorCode = -1;
-			s_nativeExceptionStack = nullptr;
-		}
-		if (threadId == s_field->threadId)
-		{
-			fireInJsThread();
-		}
-		else
-		{
-			AsyncTask::post(fireInJsThread);
-			break;
-		}
+		Array<StackInfo> stack = getStack(exptr, GetCurrentThread());
+		CsLock lock = s_stackLock;
+		unsigned int expected = 0;
+		if (!s_nativeErrorCode.compare_exchange_strong(expected, code)) goto _already;
+		s_nativeExceptionThread = threadId;
+		s_nativeExceptionStack = move(stack);
+		memcpy(s_field->exceptionInfos, exptr->ExceptionRecord->ExceptionInformation, sizeof(s_field->exceptionInfos));
+	}
+	catch (...)
+	{
+		CsLock lock = s_stackLock;
+		s_nativeErrorCode = -1;
+		s_nativeExceptionStack = nullptr;
+		s_nativeExceptionThread = threadId;
+	}
+
+_already:
+	if (threadId == s_field->threadId)
+	{
+		fireInJsThread();
+	}
+	else
+	{
+		AsyncTask::post(fireInJsThread);
 	}
 	Sleep(INFINITE);
 }

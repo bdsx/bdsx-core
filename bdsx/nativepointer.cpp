@@ -351,6 +351,7 @@ void NativePointer::writeBuffer(JsValue buffer) throws(JsException)
 		accessViolation(m_address);
 	}
 }
+
 void NativePointer::writeCxxString(Text16 text, int encoding) throws(JsException)
 {
 	TSZ mb;

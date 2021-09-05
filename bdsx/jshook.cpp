@@ -56,6 +56,7 @@ namespace
 		if (*newContext == JS_INVALID_REFERENCE) return JsErrorOutOfMemory;
 		return JsNoError;
 	}
+
 	JsErrorCode CALLBACK JsSetCurrentContextHook(JsContextRef context) noexcept
 	{
 		return JsNoError;
