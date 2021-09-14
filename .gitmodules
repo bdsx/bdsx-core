@@ -1,3 +1,4 @@
 [submodule "node-chakracore"]
 	path = node-chakracore
 	url = https://github.com/bdsx/node-chakracore
+	branch = master
