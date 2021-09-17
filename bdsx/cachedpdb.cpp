@@ -317,6 +317,11 @@ autoptr CachedPdb::getProcAddress(pcstr16 predefined, pcstr name) noexcept
 			if (state == CacheState::New)
 			{
 				cout << "[BDSX] Generating " << (Utf16ToAnsi)(Text16)predefined << endl;
+				HMODULE hntdll = GetModuleHandle("ntdll.dll");
+				if (hntdll && GetProcAddress(hntdll, "wine_get_version")) {
+					cerr << "[BDSX] Cannot generate pdb cache on Linux! Please generate it on Windows and copy the file to the Linux machine" << endl;
+					return nullptr;
+				}
 			}
 			else if (state == CacheState::NotMatched)
 			{
@@ -421,6 +426,11 @@ JsValue CachedPdb::getProcAddresses(pcstr16 predefined, JsValue out, JsValue arr
 			CacheState state = targets.checkMd5(fis, true);
 			if (state == CacheState::New)
 			{
+				HMODULE hntdll = GetModuleHandle("ntdll.dll");
+				if (hntdll && GetProcAddress(hntdll, "wine_get_version")) {
+					cerr << "[BDSX] Cannot generate pdb cache on Linux! Please generate it on Windows and copy the file to the Linux machine" << endl;
+					return out;
+				}
 				if (!quiet) g_ctx->log(TSZ16() << u"[BDSX] Generating " << predefined);
 			}
 			else if (state == CacheState::NotMatched)
