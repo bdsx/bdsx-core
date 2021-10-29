@@ -294,7 +294,6 @@ int CachedPdb::getOptions() throws(JsException)
 }
 
 TText16 CachedPdb::undecorate(Text16 text, int flags) noexcept {
-
 	TText16 undecorated;
 	undecorated << PdbReader::undecorate(text.data(), flags);
 	return move(undecorated);
@@ -368,12 +367,13 @@ autoptr CachedPdb::getProcAddress(pcstr16 predefined, pcstr name) noexcept
 		TText line;
 		line << txname;
 		foundptr = m_pdb.getFunctionAddress(line.c_str());
-		line << " = 0x" << hexf((byte*)foundptr - (byte*)m_pdb.base());
-		cout << line << endl;
-
-		targets.startWriting();
-		*targets.fos << line << "\r\n";
-		targets.fos->flush();
+		if (foundptr != nullptr) {
+			line << " = 0x" << hexf((byte*)foundptr - (byte*)m_pdb.base());
+			cout << line << endl;
+			targets.startWriting();
+			*targets.fos << line << "\r\n";
+			targets.fos->flush();
+		}
 	}
 	catch (FunctionError& err)
 	{
@@ -740,9 +740,8 @@ void CachedPdb::getAllEx(JsValue cb) throws(kr::JsException)
 		} local;
 		local.now = timepoint::now();
 		local.cb = cb;
-
-		m_pdb.getAllEx16([&local](Text16 name, SYMBOL_INFOW* info) {
-
+		m_pdb.getAllEx([&local](Text name, SYMBOL_INFO* info) {
+			size_t size = name.size();
 			JsValue tuple = JsNewObject;
 			tuple.set(s_field->typeIndex, (int)info->TypeIndex);
 			tuple.set(s_field->index, (int)info->Index);
@@ -760,7 +759,7 @@ void CachedPdb::getAllEx(JsValue cb) throws(kr::JsException)
 			tuple.set(s_field->_register, (int)info->Register);
 			tuple.set(s_field->scope, (int)info->Scope);
 			tuple.set(s_field->tag, (int)info->Tag);
-			tuple.set(s_field->name, name);
+			tuple.set(s_field->name, TSZ16() << (NoneToUtf16)name);
 			local.out.set(local.counter++, tuple);
 
 			timepoint newnow = timepoint::now();
