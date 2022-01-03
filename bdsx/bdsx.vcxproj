@@ -137,6 +137,7 @@ echo #define BUILD_TIME "%25date%-%time2:.=%"&gt;"gen/buildtime.h"</Command>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="forward.cpp" />
+    <ClCompile Include="vcstring.cpp" />
     <ClCompile Include="mtqueue.cpp" />
     <ClCompile Include="uvasync.cpp" />
     <ClCompile Include="structurepointer.cpp" />
@@ -162,6 +163,7 @@ echo #define BUILD_TIME "%25date%-%time2:.=%"&gt;"gen/buildtime.h"</Command>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="vcstring.h" />
     <ClInclude Include="mtqueue.h" />
     <ClInclude Include="unwind.h" />
     <ClInclude Include="uvasync.h" />

@@ -3,6 +3,7 @@
 #include "voidpointer.h"
 
 class NativePointer;
+template <typename CHR> struct String;
 
 class StaticPointer :public kr::JsObjectT<StaticPointer, VoidPointer>
 {

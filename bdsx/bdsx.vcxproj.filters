@@ -17,6 +17,7 @@
     <ClCompile Include="staticpointer.cpp" />
     <ClCompile Include="mtqueue.cpp" />
     <ClCompile Include="forward.cpp" />
+    <ClCompile Include="vcstring.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="jsctx.h" />
@@ -35,6 +36,7 @@
     <ClInclude Include="staticpointer.h" />
     <ClInclude Include="mtqueue.h" />
     <ClInclude Include="unwind.h" />
+    <ClInclude Include="vcstring.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="src">

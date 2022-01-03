@@ -12,6 +12,7 @@
 #include "uvasync.h"
 #include "mtqueue.h"
 #include "gen/version.h"
+#include "vcstring.h"
 
 #include <KR3/win/windows.h>
 #include <KRWin/hook.h>
@@ -151,11 +152,6 @@ BOOL WINAPI DllMain(
 
 namespace
 {
-	float tester(double a, float b, int64_t c) noexcept
-	{
-		return (float)a;
-	}
-
 	void trycatch(void* param, void(*func)(void*), void(*_catch)(void*, pcstr)) noexcept
 	{
 		try
@@ -264,7 +260,6 @@ void nodegate::initNativeModule(void* exports_raw) noexcept
 				});
 			cgate.setMethod(u"nodeLoopOnce", nodegate::loopOnce);
 			cgate.set(u"nodeLoop", VoidPointer::make(nodegate::loop));
-			cgate.set(u"tester", VoidPointer::make(tester));
 
 			cgate.setMethod(u"allocExecutableMemory", [](uint64_t size, uint64_t align) {
 				hook::ExecutableAllocator* alloc = hook::ExecutableAllocator::getInstance();
@@ -272,6 +267,9 @@ void nodegate::initNativeModule(void* exports_raw) noexcept
 				ptr->setAddressRaw(alloc->alloc(size, max(align, 1)));
 				return ptr;
 				});
+
+			cgate.set(u"toWide", VoidPointer::make(String_toWide));
+			cgate.set(u"toUtf8", VoidPointer::make(String_toUtf8));
 		}
 
 		{

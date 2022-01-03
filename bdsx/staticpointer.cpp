@@ -3,92 +3,12 @@
 
 #include "nativepointer.h"
 #include "encoding.h"
+#include "vcstring.h"
 
 #include <KR3/util/unaligned.h>
 #include <KR3/win/handle.h>
 
 using namespace kr;
-
-struct Ucrtbase
-{
-	void*(*malloc)(size_t size);
-	void(*free)(void* ptr);
-
-	Ucrtbase() noexcept
-	{
-		HMODULE dll = GetModuleHandleW(L"ucrtbase.dll");
-		_assert(dll != nullptr);
-		malloc = (autoptr)GetProcAddress(dll, "malloc");
-		free = (autoptr)GetProcAddress(dll, "free");
-	}
-};
-namespace
-{
-	Ucrtbase ucrtbase;
-
-	void* allocate16(size_t size) noexcept {
-		if (size >= 0x1000) {
-			uintptr_t res = (uintptr_t)ucrtbase.malloc(size+0x27);
-			if (res == 0) return nullptr;
-			void** out = (void**)((res + 0x27) & (~0x1f));
-			out[-1] = (void*)res;
-			return out;
-		}
-		else {
-			return ucrtbase.malloc(size);
-		}
-	}
-
-	void free16(void* p, size_t size) noexcept {
-		if (size >= 0x1000) {
-			p = ((void**)p)[-1];
-		}
-		ucrtbase.free(p);
-	}
-}
-
-struct String
-{
-	union
-	{
-		char buffer[16];
-		char* pointer;
-	};
-	size_t size;
-	size_t capacity;
-
-	char* data() noexcept
-	{
-		if (capacity >= 0x10) return pointer;
-		else return buffer;
-	}
-	void assign(Text text) noexcept
-	{
-		size_t nsize = text.size();
-		char* dest;
-		if (nsize > capacity)
-		{
-			if (capacity >= 0x10) free16(pointer, capacity);
-			capacity = nsize;
-			dest = pointer = (char*)allocate16(nsize + 1);
-			if (dest == nullptr)
-			{
-				memcpy(buffer, "[out of memory]", 16);
-				capacity = 15;
-				size = 15;
-				return;
-			}
-		}
-		else
-		{
-			dest = data();
-		}
-		memcpy(dest, text.data(), nsize);
-		dest[nsize] = '\0';
-		size = nsize;
-	}
-};
-
 
 ATTR_NORETURN void accessViolation(const void* address) throws(JsException)
 {
@@ -252,7 +172,7 @@ JsValue StaticPointer::getBuffer(int bytes, int offset) throws(JsException)
 }
 TText16 StaticPointer::getCxxString(int offset, int encoding) throws(JsException)
 {
-	String* str = (String*)(m_address + offset);
+	String<char>* str = (String<char>*)(m_address + offset);
 	TText16 text;
 	try
 	{
@@ -413,7 +333,7 @@ void StaticPointer::setBuffer(JsValue buffer, int offset) throws(JsException)
 }
 void StaticPointer::setCxxString(Text16 text, int offset, int encoding) throws(JsException)
 {
-	String* str = (String*)(m_address + offset);
+	String<char>* str = (String<char>*)(m_address + offset);
 	TSZ utf8;
 	try
 	{
@@ -701,7 +621,6 @@ void StaticPointer::_setas(T value, int offset) throws(JsException)
 		accessViolation(p);
 	}
 }
-
 
 AllocatedPointer::AllocatedPointer(const kr::JsArguments& args) noexcept
 	:JsObjectT<AllocatedPointer, StaticPointer>(args)
