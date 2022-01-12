@@ -35,6 +35,7 @@ public:
 
 	void fill(int bytevalue, int bytes, int offset) throws(kr::JsException);
 	void copyFrom(VoidPointer* from, int bytes, int this_offset, int from_offset) throws(kr::JsException);
+	void copyTo(kr::JsValue buffer, int bytes, int offset) throws(kr::JsException);
 	void setBoolean(bool v, int offset) throws(kr::JsException);
 	void setUint8(uint8_t v, int offset) throws(kr::JsException);
 	void setUint16(uint16_t v, int offset) throws(kr::JsException);

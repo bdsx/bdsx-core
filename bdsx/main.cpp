@@ -241,7 +241,7 @@ void nodegate::initNativeModule(void* exports_raw) noexcept
 			bedrock_server_exe.set(u"mainOriginal12Bytes", VoidPointer::make(s_bedrockMainOriginal12Bytes));
 			bedrock_server_exe.setMethod(u"forceKill", kr::terminate);
 		}
-
+		
 		{
 			JsValue cgate = JsNewObject;
 			exports.set(u"cgate", cgate);
@@ -270,6 +270,10 @@ void nodegate::initNativeModule(void* exports_raw) noexcept
 
 			cgate.set(u"toWide", VoidPointer::make(String_toWide));
 			cgate.set(u"toUtf8", VoidPointer::make(String_toUtf8));
+
+#ifndef NDEBUG
+			cgate.setMethod(u"memcheck", memcheck);
+#endif
 		}
 
 		{

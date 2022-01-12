@@ -211,6 +211,17 @@ void StaticPointer::copyFrom(VoidPointer* from, int bytes, int this_offset, int 
 		accessViolation(m_address);
 	}
 }
+void StaticPointer::copyTo(kr::JsValue buffer, int bytes, int offset) throws(kr::JsException) {
+	VoidPointer* ptr = buffer.getNativeObject<VoidPointer>();
+	if (ptr != nullptr) {
+		memcpy(ptr->getAddressRaw(), m_address + offset, (uint32_t)bytes);
+		return;
+	}
+	WBuffer buf = buffer.getBuffer();
+	if (buf == nullptr) throw JsException(u"argument must be buffer or pointer");
+	size_t minv = maxt((size_t)buf.size(), (uint32_t)bytes);
+	memcpy(buf.data(), m_address + offset, minv);
+}
 void StaticPointer::setBoolean(bool v, int offset) throws(JsException)
 {
 	return _setas(v, offset);
@@ -556,6 +567,7 @@ void StaticPointer::initMethods(JsClassT<StaticPointer>* cls) noexcept
 
 	cls->setMethod(u"fill", &StaticPointer::fill);
 	cls->setMethod(u"copyFrom", &StaticPointer::copyFrom);
+	cls->setMethod(u"copyTo", &StaticPointer::copyTo);
 	cls->setMethod(u"setBoolean", &StaticPointer::setBoolean);
 	cls->setMethod(u"setUint8", &StaticPointer::setUint8);
 	cls->setMethod(u"setUint16", &StaticPointer::setUint16);
