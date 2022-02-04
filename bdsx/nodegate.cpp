@@ -68,8 +68,10 @@ int nodegate::start(int argc, char** argv) noexcept
 {
     return node::Start(argc, argv);
 }
+
 void nodegate::loopOnce() noexcept
 {
+    
     if (s_checkAsyncInAsync)
     {
         if (s_asyncRef == 0) return;
@@ -147,8 +149,6 @@ void nodegate::catchException() noexcept
     nodegate::_tickCallback();
 }
 
-#include <typeinfo>
-
 AsyncTask::AsyncTask(void (*fn)(AsyncTask*)) noexcept
     :fn(fn)
 {
@@ -203,16 +203,14 @@ void AsyncTask::open() noexcept
             });
     }
 }
-void AsyncTask::close() noexcept
-{
+void AsyncTask::close() noexcept {
     if (--s_asyncRef == 0)
     {
         uv_close((uv_handle_t*)&s_processTask, nullptr);
     }
 }
 
-AsyncTask* AsyncTask::alloc(void (*cb)(AsyncTask*), size_t size) noexcept
-{
+AsyncTask* AsyncTask::alloc(void (*cb)(AsyncTask*), size_t size) noexcept {
     AsyncTask* data = (AsyncTask*)malloc(size + sizeof(AsyncTask));
     new(data) AsyncTask(cb);
     reline_new(data);

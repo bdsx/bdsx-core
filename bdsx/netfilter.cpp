@@ -21,12 +21,10 @@ namespace
 {
 	class TrafficLogger;
 
-	Set<SOCKET> s_binds;
-	CriticalSection s_csBinds;
 	Map<Ipv4Address, time_t> s_ipfilter;
 	RWLock s_ipfilterLock;
 	uint64_t s_trafficLimit = (uint64_t)-1;
-	int s_trafficLimitPeriod = 0;
+	uint64_t s_trafficLimitPeriod = 0;
 	std::atomic<uint32_t> s_lastSender;
 
 	RWLock s_trafficLock;
@@ -196,27 +194,24 @@ namespace
 
 		if (value >= s_trafficLimit)
 		{
-			if (NetFilter::addFilter(ip, s_trafficLimitPeriod == 0 ? 0 : time(nullptr) + s_trafficLimitPeriod))
+			time_t endTime;
+			if (s_trafficLimitPeriod == 0) {
+				endTime = 0;
+			}
+			else {
+				time_t now = time(nullptr);
+				endTime = now + s_trafficLimitPeriod;
+				if (endTime <= now) { // overflowed
+					endTime = (time_t)-1;
+				}
+			}
+			if (NetFilter::addFilter(ip, endTime))
 			{
 				(_new TrafficOverCallback(ip))->post();
 			}
 		}
 	}
 
-	int CALLBACK bindHook(
-		SOCKET s,
-		const sockaddr* name,
-		int namelen
-	) noexcept
-	{
-		int res = bind(s, name, namelen);
-		if (res == 0)
-		{
-			CsLock _lock = s_csBinds;
-			s_binds.insert(s);
-		}
-		return res;
-	}
 	int CALLBACK sendtoHook(
 		SOCKET s, const char FAR* buf, int len, int flags,
 		const struct sockaddr FAR* to, int tolen)
@@ -259,13 +254,6 @@ namespace
 		return res;
 	}
 
-	int WSAAPI closesocketHook(SOCKET s) noexcept
-	{
-		CsLock _lock = s_csBinds;
-		s_binds.erase(s);
-		return closesocket(s);
-	}
-
 	DeferField::DeferField() noexcept
 	{
 	}
@@ -281,8 +269,6 @@ void NetFilter::init(JsValue callbackOnExceeded) noexcept
 	s_field->callbackOnExceeded = callbackOnExceeded;
 
 	hook::IATModule ws2_32(win::Module::current(), "WS2_32.dll");
-	ws2_32.hooking(2, bindHook);
-	ws2_32.hooking(3, closesocketHook);
 	ws2_32.hooking(17, recvfromHook);
 	ws2_32.hooking(20, sendtoHook);
 	ws2_32.hooking(116, WSACleanupHook);
@@ -292,6 +278,11 @@ bool NetFilter::addFilter(kr::Ipv4Address ip, time_t endTime) noexcept
 {
 	s_ipfilterLock.enterWrite();
 	auto res = s_ipfilter.insert({ ip, endTime });
+	if (!res.second) {
+		if (res.first->second != 0) {
+			res.first->second = endTime;
+		}
+	}
 	s_ipfilterLock.leaveWrite();
 	return res.second;
 }
@@ -299,64 +290,82 @@ bool NetFilter::isFilted(Ipv4Address ip) noexcept
 {
 	s_ipfilterLock.enterRead();
 	auto iter = s_ipfilter.find(ip);
-	bool blocked = (iter != s_ipfilter.end());
-	time_t endtime;
-	if (blocked)
-	{
-		endtime = iter->second;
-		time_t now;
-		if (endtime == 0 && endtime < (now = time(nullptr)))
-		{
-			s_ipfilterLock.leaveRead();
-			// possible to change something, recheck all
-			s_ipfilterLock.enterWrite();
-
-			auto iter = s_ipfilter.find(ip);
-			if (iter != s_ipfilter.end())
-			{
-				endtime = iter->second;
-				if (endtime == 0 && endtime < now)
-				{
-					s_ipfilter.erase(iter);
-				}
-			}
-			s_ipfilterLock.leaveWrite();
-			return false;
-		}
+	if (iter == s_ipfilter.end()) {
+		s_ipfilterLock.leaveRead();
+		return false;
 	}
+
+	time_t endtime = iter->second;
 	s_ipfilterLock.leaveRead();
-	return blocked;
+
+	if (endtime == 0) {
+		return true;
+	}
+
+	time_t now;
+	if (endtime > (now = time(nullptr))) {
+		return true;
+	}
+
+	// possible to change something, recheck all
+	s_ipfilterLock.enterWrite();
+	iter = s_ipfilter.find(ip);
+	if (iter == s_ipfilter.end()) {
+		s_ipfilterLock.leaveWrite();
+		return false;
+	}
+	endtime = iter->second;
+	if (endtime == 0) {
+		s_ipfilterLock.leaveWrite();
+		return true;
+	}
+	if (endtime > now) {
+		s_ipfilter.erase(iter);
+		s_ipfilterLock.leaveWrite();
+		return false;
+	}
+	s_ipfilterLock.leaveWrite();
+	return true;
 }
 double NetFilter::getTime(Ipv4Address ip) noexcept
 {
 	s_ipfilterLock.enterRead();
 	auto iter = s_ipfilter.find(ip);
-	time_t endtime = 0;
-	if (iter != s_ipfilter.end())
-	{
-		endtime = iter->second;
-		time_t now;
-		if (endtime == 0 && endtime < (now = time(nullptr)))
-		{
-			s_ipfilterLock.leaveRead();
-			// possible to change something, recheck all
-			s_ipfilterLock.enterWrite();
-
-			auto iter = s_ipfilter.find(ip);
-			if (iter != s_ipfilter.end())
-			{
-				endtime = iter->second;
-				if (endtime == 0 && endtime < now)
-				{
-					s_ipfilter.erase(iter);
-				}
-			}
-			s_ipfilter.erase(iter);
-			s_ipfilterLock.leaveWrite();
-			return -1.0;
-		}
+	if (iter == s_ipfilter.end()) {
+		s_ipfilterLock.leaveRead();
+		return -1.0;
 	}
+
+	time_t endtime = iter->second;
 	s_ipfilterLock.leaveRead();
+
+	if (endtime == 0) {
+		return 0.0;
+	}
+
+	time_t now;
+	if (endtime > (now = time(nullptr))) {
+		return (double)endtime;
+	}
+
+	// possible to change something, recheck all
+	s_ipfilterLock.enterWrite();
+	iter = s_ipfilter.find(ip);
+	if (iter == s_ipfilter.end()) {
+		s_ipfilterLock.leaveWrite();
+		return -1.0;
+	}
+	endtime = iter->second;
+	if (endtime == 0) {
+		s_ipfilterLock.leaveWrite();
+		return 0.0;
+	}
+	if (endtime > now) {
+		s_ipfilter.erase(iter);
+		s_ipfilterLock.leaveWrite();
+		return -1.0;
+	}
+	s_ipfilterLock.leaveWrite();
 	return (double)endtime;
 }
 bool NetFilter::removeFilter(kr::Ipv4Address ip) noexcept
@@ -376,7 +385,7 @@ void NetFilter::setTrafficLimit(uint64_t bytes) noexcept
 {
 	s_trafficLimit = bytes;
 }
-void NetFilter::setTrafficLimitPeriod(int seconds) noexcept
+void NetFilter::setTrafficLimitPeriod(uint64_t seconds) noexcept
 {
 	s_trafficLimitPeriod = seconds;
 }
@@ -387,33 +396,47 @@ Ipv4Address NetFilter::getLastSender() noexcept
 }
 JsValue NetFilter::entries() noexcept
 {
-	bool writing = false;
 	time_t now = time(nullptr);
+	Array<Ipv4Address> removing;
 
 	s_ipfilterLock.enterRead();
 	JsValue arr = JsNewArray();
 
+	int index = 0;
 	auto end = s_ipfilter.end();
-	for (auto iter = s_ipfilter.begin(); iter != end;)
-	{
+	for (auto iter = s_ipfilter.begin(); iter != end; iter++) {
 		time_t endtime = iter->second;
-		if (endtime == 0 && endtime < now)
-		{
-			if (!writing)
-			{
-				writing = true;
-				s_ipfilterLock.changeToWrite();
+		if (endtime != 0 && endtime < now) {
+			if (removing.capacityBytes() == 0) {
+				removing.reserve(16);
 			}
-			iter = s_ipfilter.erase(iter);
+			removing.push(iter->first);
 			continue;
 		}
 		JsValue entry = JsNewArray();
 		entry.set(0, TSZ16() << iter->first);
 		entry.set(1, (double)iter->second);
-		iter++;
+		arr.set(index++, entry);
 	}
-	if (writing) s_ipfilterLock.leaveWrite();
-	else s_ipfilterLock.leaveRead();
+	s_ipfilterLock.leaveRead();
+
+	if (!removing.empty()) {
+		s_ipfilterLock.enterWrite();
+		for (Ipv4Address addr : removing) {
+			auto iter = s_ipfilter.find(addr);
+			if (iter == s_ipfilter.end()) continue;
+			if (iter->second != 0 && iter->second < now) {
+				s_ipfilter.erase(iter);
+			}
+			else {
+				JsValue entry = JsNewArray();
+				entry.set(0, TSZ16() << iter->first);
+				entry.set(1, (double)iter->second);
+				arr.set(index++, entry);
+			}
+		}
+		s_ipfilterLock.leaveWrite();
+	}
 
 	return arr;
 }
@@ -427,15 +450,40 @@ JsValue getNetFilterNamespace() noexcept
 		out << ptr;
 		return move(out);
 		});
-	ipfilter.setMethod(u"add", [](Text16 ipport, int period) {
+	ipfilter.setMethod(u"add", [](Text16 ipport, double period) {
 		Text16 iptext = ipport.readwith_e('|');
 		if (iptext.empty()) return;
-		NetFilter::addFilter(Ipv4Address(TSZ() << toNone(iptext)), period == 0 ? 0 : time(nullptr) + period);
+
+		time_t timeTo;
+		if (isnan(period)) {
+			timeTo = 0;
+		}
+		else {
+			if (period <= 0) return;
+			time_t now = time(nullptr);
+			timeTo = now + (int64_t)period;
+			if (timeTo < now) { // overflowed
+				timeTo = (time_t)-1;
+			}
+		}
+		NetFilter::addFilter(Ipv4Address(TSZ() << toNone(iptext)), timeTo);
 		});
 	ipfilter.setMethod(u"addAt", [](Text16 ipport, double uts) {
 		Text16 iptext = ipport.readwith_e('|');
 		if (iptext.empty()) return;
-		NetFilter::addFilter(Ipv4Address(TSZ() << toNone(iptext)), (time_t)uts);
+		time_t timeTo;
+		time_t now = time(nullptr);
+		if (isnan(uts)) {
+			timeTo = now;
+		}
+		else if (uts < 0) {
+			return;
+		}
+		else {
+			timeTo = (time_t)uts;
+			if (timeTo != 0 && timeTo <= now) return;
+		}
+		NetFilter::addFilter(Ipv4Address(TSZ() << toNone(iptext)), timeTo);
 		});
 	ipfilter.setMethod(u"remove", [](Text16 ipport) {
 		Text16 iptext = ipport.readwith_e('|');
@@ -460,10 +508,12 @@ JsValue getNetFilterNamespace() noexcept
 		return NetFilter::getTime(Ipv4Address(TSZ() << toNone(iptext)));
 		});
 	ipfilter.setMethod(u"setTrafficLimit", [](double bytes) {
-		return NetFilter::setTrafficLimit((uint64_t)bytes);
+		if (isnan(bytes)) return;
+		return NetFilter::setTrafficLimit(bytes <= 0 ? 0 : (uint64_t)bytes);
 		});
-	ipfilter.setMethod(u"setTrafficLimitPeriod", [](int seconds) {
-		return NetFilter::setTrafficLimitPeriod(seconds);
+	ipfilter.setMethod(u"setTrafficLimitPeriod", [](double seconds) {
+		if (isnan(seconds)) return;
+		return NetFilter::setTrafficLimitPeriod(seconds <= 0 ? 0 :(uint64_t)seconds);
 		});
 	ipfilter.setMethod(u"logTraffic", [](JsValue path) {
 		if (path.cast<bool>())

@@ -13,7 +13,7 @@ public:
 	static bool removeFilter(kr::Ipv4Address ip) noexcept;
 	static void clearFilter() noexcept;
 	static void setTrafficLimit(uint64_t bytes) noexcept;
-	static void setTrafficLimitPeriod(int seconds) noexcept;
+	static void setTrafficLimitPeriod(uint64_t seconds) noexcept;
 	static kr::Ipv4Address getLastSender() noexcept;
 	static kr::JsValue entries() noexcept;
 };
