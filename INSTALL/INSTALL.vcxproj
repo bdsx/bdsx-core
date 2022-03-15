@@ -127,17 +127,20 @@
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">call %(identity) "$(OutDir)" "$(Configuration)" "$(SolutionDir)"</Command>
       <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">call %(identity) "$(OutDir)" "$(Configuration)" "$(SolutionDir)"</Command>
       <Command Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">call %(identity) "$(OutDir)" "$(Configuration)" "$(SolutionDir)"</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)..\bdsx\bedrock_server\ChakraCore.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.pdb;%(Outputs)</Outputs>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)..\bdsx\bedrock_server\ChakraCore.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.pdb;%(Outputs)</Outputs>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">$(SolutionDir)..\bdsx\bedrock_server\ChakraCore.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.pdb;%(Outputs)</Outputs>
-      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)Chakra.dll;$(OutDir)Chakra.pdb;$(OutDir)ChakraCore.dll</AdditionalInputs>
-      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)Chakra.dll;$(OutDir)Chakra.pdb;$(OutDir)ChakraCore.dll</AdditionalInputs>
-      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">$(OutDir)Chakra.dll;$(OutDir)Chakra.pdb;$(OutDir)ChakraCore.dll</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)..\bdsx\bedrock_server\ChakraCore.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.dll;$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.dll;$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.pdb;%(Outputs)</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)..\bdsx\bedrock_server\ChakraCore.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.dll;$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.dll;$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.pdb;%(Outputs)</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">$(SolutionDir)..\bdsx\bedrock_server\ChakraCore.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.dll;$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.dll;$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.pdb;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)VCRUNTIME140_1.dll;$(OutDir)VCRUNTIME140_1.pdb;$(OutDir)ChakraCore.dll</AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)VCRUNTIME140_1.dll;$(OutDir)VCRUNTIME140_1.pdb;$(OutDir)ChakraCore.dll</AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">$(OutDir)VCRUNTIME140_1.dll;$(OutDir)VCRUNTIME140_1.pdb;$(OutDir)ChakraCore.dll</AdditionalInputs>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\bdsx\bdsx.vcxproj">
       <Project>{31964e2c-9e3d-4c98-a17b-589e322aa174}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\chakra2chakracore\chakra2chakracore.vcxproj">
+      <Project>{77e07fd4-ed4b-4aaf-8b7a-d5751a742203}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

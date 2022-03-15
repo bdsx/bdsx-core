@@ -15,7 +15,8 @@ goto :eof
 :copydll
 if not exist "%~1" mkdir "%~1"
 copy "%outdir%Chakra.dll" "%~1\Chakra.dll"
-copy "%outdir%Chakra.pdb" "%~1\Chakra.pdb"
+copy "%outdir%VCRUNTIME140_1.dll" "%~1\VCRUNTIME140_1.dll"
+copy "%outdir%VCRUNTIME140_1.pdb" "%~1\VCRUNTIME140_1.pdb"
 copy "%outdir%ChakraCore.dll" "%~1\ChakraCore.dll"
 EXIT /B 0
 
