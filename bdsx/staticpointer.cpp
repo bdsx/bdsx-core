@@ -333,7 +333,7 @@ void StaticPointer::setBuffer(JsValue buffer, int offset) throws(JsException)
 	try
 	{
 		Buffer buf = buffer.getBuffer();
-		if (buf == nullptr) throw JsException(u"argument must be buffer");
+		if (buf == nullptr) return;
 		size_t size = buf.size();
 		memcpy(p, buf.data(), size);
 	}

@@ -176,6 +176,7 @@ void VoidPointer::initMethods(JsClassT<VoidPointer>* cls) noexcept
 	cls->setMethod(u"addressOfThis", &VoidPointer::addressOfThis);
 
 	cls->setMethod(u"equals", &VoidPointer::equals);
+	cls->setMethod(u"equalsptr", &VoidPointer::equals);
 	cls->setMethod(u"add", &VoidPointer::add);
 	cls->setMethod(u"sub", &VoidPointer::sub);
 	cls->setMethod(u"addBin", &VoidPointer::addBin);
