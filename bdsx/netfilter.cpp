@@ -490,7 +490,7 @@ JsValue getNetFilterNamespace() noexcept
 		if (iptext.empty()) return false;
 		return NetFilter::removeFilter(Ipv4Address(TSZ() << toNone(iptext)));
 		});
-	ipfilter.setMethod(u"entires", NetFilter::entries);
+	ipfilter.setMethod(u"entries", NetFilter::entries);
 	ipfilter.setMethod(u"init", [](JsValue callbackOnExceeded) {
 		NetFilter::init(callbackOnExceeded);
 		});

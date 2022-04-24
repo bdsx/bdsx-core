@@ -7,6 +7,7 @@
 #include "unwind.h"
 
 #include <KR3/win/windows.h>
+#include <KR3/win/symopt.h>
 #include <KR3/mt/criticalsection.h>
 #include <KR3/util/StackWalker.h>
 #include <KR3/util/pdb.h>
@@ -61,7 +62,7 @@ namespace
 
 	Array<StackInfo> getStack(EXCEPTION_POINTERS* exptr, HANDLE thread) noexcept
 	{
-		PdbReader::setOptions(0x00000002);
+		PdbReader::setOptions(SYMOPT_UNDNAME);
 		try {
 			for (int i = 0; i < 3; i++)
 			{

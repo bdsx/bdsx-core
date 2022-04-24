@@ -58,6 +58,7 @@ namespace
         s_inited = true;
         v8::Isolate* isolate = context->GetIsolate();
         node::AddEnvironmentCleanupHook(isolate, [](void*) { clear();  }, nullptr);
+        node::AtExit([](void*) { clear(); });
         nodegate::initNativeModule(*exports);
         atexit(clear);
     }

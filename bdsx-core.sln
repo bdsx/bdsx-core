@@ -38,6 +38,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "INSTALL", "INSTALL\INSTALL.
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "chakra2chakracore", "chakra2chakracore\chakra2chakracore.vcxproj", "{77E07FD4-ED4B-4AAF-8B7A-D5751A742203}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "pdbcachegen", "pdbcachegen\pdbcachegen.vcxproj", "{0DB97EDF-3343-4575-AF19-0EF056D395B2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -123,6 +125,12 @@ Global
 		{77E07FD4-ED4B-4AAF-8B7A-D5751A742203}.Release|x64.Build.0 = Release|x64
 		{77E07FD4-ED4B-4AAF-8B7A-D5751A742203}.ReleaseTest|x64.ActiveCfg = Release|x64
 		{77E07FD4-ED4B-4AAF-8B7A-D5751A742203}.ReleaseTest|x64.Build.0 = Release|x64
+		{0DB97EDF-3343-4575-AF19-0EF056D395B2}.Debug|x64.ActiveCfg = Debug|x64
+		{0DB97EDF-3343-4575-AF19-0EF056D395B2}.Debug|x64.Build.0 = Debug|x64
+		{0DB97EDF-3343-4575-AF19-0EF056D395B2}.Release|x64.ActiveCfg = Release|x64
+		{0DB97EDF-3343-4575-AF19-0EF056D395B2}.Release|x64.Build.0 = Release|x64
+		{0DB97EDF-3343-4575-AF19-0EF056D395B2}.ReleaseTest|x64.ActiveCfg = Release|x64
+		{0DB97EDF-3343-4575-AF19-0EF056D395B2}.ReleaseTest|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
