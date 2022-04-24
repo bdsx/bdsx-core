@@ -18,4 +18,7 @@
     <LocalDebuggerCommandArguments>$(SolutionDir)..\bdsx</LocalDebuggerCommandArguments>
     <LocalDebuggerWorkingDirectory>$(SolutionDir)..\bdsx\bedrock_server</LocalDebuggerWorkingDirectory>
   </PropertyGroup>
+  <PropertyGroup>
+    <ShowAllFiles>true</ShowAllFiles>
+  </PropertyGroup>
 </Project>

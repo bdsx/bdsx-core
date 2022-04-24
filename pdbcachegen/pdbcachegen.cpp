@@ -43,6 +43,7 @@ int wmain(int argn, const wchar_t** args) {
 
 	pcstr16 exePath = nullptr, cachePath = nullptr;
 
+	args++;
 	for (;;) {
 		pcstr16 arg = unwide(*args++);
 		if (arg == nullptr) break;

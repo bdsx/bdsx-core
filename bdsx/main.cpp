@@ -13,6 +13,7 @@
 #include "mtqueue.h"
 #include "gen/version.h"
 #include "vcstring.h"
+#include "../pdbcachegen/pdbcachegen.h"
 
 #include <KR3/win/windows.h>
 #include <KRWin/hook.h>
@@ -47,6 +48,7 @@ namespace
 
 	using main_t = int(*)(int, char**, char**);
 	main_t s_bedrockMain;
+	BText<encoder::Md5Context::SIZE * 2> s_md5Hex;
 	constexpr size_t ORIGINAL_BYTES_COUNT = 12;
 	byte s_bedrockMainOriginal12Bytes[ORIGINAL_BYTES_COUNT];
 
@@ -84,6 +86,52 @@ BOOL WINAPI DllMain(
 {
 	if (fdwReason == DLL_PROCESS_ATTACH)
 	{
+		// md5 check
+		PdbCacheHeader header;
+		{
+			byte md5[encoder::Md5Context::SIZE];
+			TText16 moduleName = CurrentApplicationPath();
+			try {
+				encoder::Md5Context ctx;
+				ctx.reset();
+				ctx.update((TBuffer)File::openAsArray<void>(moduleName.data()));
+				ctx.finish(md5);
+				s_md5Hex = (encoder::Hex)(Buffer)md5;
+			}
+			catch (Error&) {
+				cerr << "[BDSX] Cannot read bedrock_server.exe" << endl;
+				cerr << "[BDSX] Failed to get MD5" << endl;
+				terminate(-1);
+			}
+
+			try {
+				moduleName._setEnd(moduleName.find_r('\\') + 1);
+				moduleName << u"pdbcache.bin" << nullterm;
+				Must<File> pdbcache = File::open(moduleName.data());
+				pdbcache->read(&header, sizeof(header));
+			}
+			catch (Error&) {
+				cerr << "[BDSX] Cannot read pdbcache.bin" << endl;
+				cerr << "[BDSX] Failed to the main entry" << endl;
+				terminate(-1);
+			}
+
+			if (header.version != PdbCacheHeader::VERSION) {
+				cerr << "[BDSX] pdbcache.bin version does not Matched" << endl;
+				cerr << "[BDSX] Required version = " << PdbCacheHeader::VERSION << endl;
+				cerr << "[BDSX] Actual version = " << header.version << endl;
+				terminate(-1);
+			}
+
+			if (memcmp(header.md5, md5, encoder::Md5Context::SIZE) != 0) {
+				cerr << "[BDSX] MD5 Hash does not Matched" << endl;
+				cerr << "[BDSX] pdbcache.bin MD5 = " << (encoder::Hex)(Buffer)header.md5 << endl;
+				cerr << "[BDSX] bedrock_server.exe MD5 = " << s_md5Hex << endl;
+				cerr << "[BDSX] Please use 'npm i' to update it" << endl;
+				terminate(-1);
+			}
+		}
+
 		// update utf8 args
 		{
 			Array<size_t> positions;
@@ -115,32 +163,9 @@ BOOL WINAPI DllMain(
 			*argptr = nullptr;
 		}
 
-		// md5 self
-		try
-		{
-			TText16 moduleName = CurrentApplicationPath();
-			g_md5 = (encoder::Hex)(TBuffer)encoder::Md5::hash(File::open(moduleName.data()));
-
-			path16.joinEx(&CachedPdb::predefinedForCore, { (Text16)moduleName, (Text16)u"../../bdsx/bds/pdb.ini"}, false);
-			CachedPdb::predefinedForCore << nullterm;
-		}
-		catch (Error&)
-		{
-			cerr << "[BDSX] Cannot read bedrock_server.exe" << endl;
-			cerr << "[BDSX] Failed to get MD5" << endl;
-			terminate(-1);
-		}
-
-		// load pdb
-		PdbReader::setOptions(0);
-		s_bedrockMain = g_pdb.getProcAddress(CachedPdb::predefinedForCore.data(), "main");
-		if (s_bedrockMain == nullptr)
-		{
-			cerr << "[BDSX] Failed to find 'main' of bedrock_server.exe" << endl;
-			terminate(-1);
-		}
 		// hook main
 		{
+			s_bedrockMain = (main_t)((uintptr_t)GetModuleHandle(nullptr) + header.mainRva);
 			memcpy(s_bedrockMainOriginal12Bytes, s_bedrockMain, ORIGINAL_BYTES_COUNT);
 			Unprotector unpro(s_bedrockMain, ORIGINAL_BYTES_COUNT);
 			CodeWriter writer((void*)unpro, ORIGINAL_BYTES_COUNT);
@@ -233,7 +258,7 @@ void nodegate::initNativeModule(void* exports_raw) noexcept
 		{
 			JsValue bedrock_server_exe = JsNewObject;
 			exports.set(u"bedrock_server_exe", bedrock_server_exe);
-			bedrock_server_exe.set(u"md5", (Text)g_md5);
+			bedrock_server_exe.set(u"md5", (Text)s_md5Hex);
 			bedrock_server_exe.set(u"argc", s_argc);
 			bedrock_server_exe.set(u"args", VoidPointer::make(s_args));
 			bedrock_server_exe.set(u"argsLine", (Text16)unwide(GetCommandLineW()));
