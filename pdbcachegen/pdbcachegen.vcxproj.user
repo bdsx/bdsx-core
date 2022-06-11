@@ -5,18 +5,18 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>-f</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-f ../../bdsx/bedrock_server/bedrock_server.exe ../../bdsx/bedrock_server/pdbcache.bin</LocalDebuggerCommandArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>-f</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-f ../../bdsx/bedrock_server/bedrock_server.exe ../../bdsx/bedrock_server/pdbcache.bin</LocalDebuggerCommandArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>-f</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-f ../../bdsx/bedrock_server/bedrock_server.exe ../../bdsx/bedrock_server/pdbcache.bin</LocalDebuggerCommandArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>-f</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-f ../../bdsx/bedrock_server/bedrock_server.exe ../../bdsx/bedrock_server/pdbcache.bin</LocalDebuggerCommandArguments>
   </PropertyGroup>
 </Project>

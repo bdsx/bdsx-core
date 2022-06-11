@@ -5,7 +5,6 @@
 #include "encoding.h"
 #include "vcstring.h"
 
-#include <KR3/util/unaligned.h>
 #include <KR3/win/handle.h>
 
 using namespace kr;

@@ -18,7 +18,6 @@
 #include <KR3/win/windows.h>
 #include <KRWin/hook.h>
 #include <KR3/initializer.h>
-#include <KR3/util/unaligned.h>
 #include <KR3/net/socket.h>
 #include <KR3/util/StackWalker.h>
 #include <KR3/data/crypt.h>

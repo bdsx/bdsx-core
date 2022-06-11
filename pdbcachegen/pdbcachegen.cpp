@@ -142,7 +142,6 @@ int wmain(int argn, const wchar_t** args) {
 	size_t dupMax = 0;
 	for (Symbol& sym : symbols) {
 		uint32_t hash = hashString(sym.name);
-		if (sym.name == u"vsnprintf") debug();
 		uint32_t rva = intact<uint32_t>((uint64_t)sym.address - base);
 		if (hash == mainHash && sym.name == mainText) {
 			header.mainRva = rva;

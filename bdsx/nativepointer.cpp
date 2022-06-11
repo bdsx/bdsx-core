@@ -4,7 +4,6 @@
 #include "encoding.h"
 
 #include <string>
-#include <KR3/util/unaligned.h>
 
 using namespace kr;
 

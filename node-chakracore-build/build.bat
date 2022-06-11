@@ -14,7 +14,7 @@ if %found%==1 (
 )
 
 pushd "%SolutionDir%\node-chakracore"
-call vcbuild.bat %Config% vs2019 cctest
+call vcbuild.bat %Config% vs2022 cctest
 popd
 call :check_output
 if %found%==1 (

@@ -3,8 +3,6 @@
 
 #include "nativepointer.h"
 
-#include <KR3/util/unaligned.h>
-
 using namespace kr;
 
 VoidPointer::VoidPointer(const JsArguments& args) noexcept
