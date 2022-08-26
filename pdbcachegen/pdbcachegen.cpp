@@ -141,6 +141,10 @@ int wmain(int argn, const wchar_t** args) {
 
 	size_t dupMax = 0;
 	for (Symbol& sym : symbols) {
+		const char16_t* nullend = sym.name.find(u'\0');
+		if (nullend != nullptr) {
+			sym.name.cut_self(nullend); // Invalid symbol
+		}
 		uint32_t hash = hashString(sym.name);
 		uint32_t rva = intact<uint32_t>((uint64_t)sym.address - base);
 		if (hash == mainHash && sym.name == mainText) {
