@@ -230,6 +230,42 @@ namespace
 		throw kr::JsException(kr::TSZ16() << u"JsErrorCode: 0x" << kr::hexf((int)err));
 	}
 
+	int bdsxToWide(char const* src, int srclen, char16_t* dest, int destlen) noexcept {
+		if (src == nullptr) return 0;
+		if (srclen < 0) {
+			size_t n = mem::strlen(src);
+			srclen = (int)min(n, 0x7fffffff);
+		}
+		Text srctxt(src, srclen);
+		if (destlen <= 0) {
+			size_t n = Utf8ToUtf16::length(srctxt);
+			return (int)min(n, 0x7fffffff);
+		}
+		else {
+			Writer16 writer(dest, destlen);
+			Utf8ToUtf16::encode(&writer, &srctxt);
+			return (int)(writer.end() - dest);
+		}
+	}
+	int bdsxToUtf8(char16_t const* src, int srclen, char* dest, int destlen) noexcept {
+		if (src == nullptr) return 0;
+		if (srclen <= 0) {
+			size_t n = mem16::strlen(src);
+			srclen = (int)min(n, 0x7fffffff);
+		}
+		Text16 srctxt(src, srclen);
+		if (destlen <= 0) {
+			size_t n = Utf16ToUtf8::length(srctxt);
+			return (int)min(n, 0x7fffffff);
+		}
+		else {
+			Writer writer(dest, destlen);
+			Utf16ToUtf8::encode(&writer, &srctxt);
+			return (int)(writer.end() - dest);
+		}
+	}
+	
+
 	namespace stackutil
 	{
 		void* pointer_js2class(JsValueRef value) noexcept
@@ -292,8 +328,8 @@ void nodegate::initNativeModule(void* exports_raw) noexcept
 				return ptr;
 				});
 
-			cgate.set(u"toWide", VoidPointer::make(String_toWide));
-			cgate.set(u"toUtf8", VoidPointer::make(String_toUtf8));
+			cgate.set(u"toWide", VoidPointer::make(bdsxToWide));
+			cgate.set(u"toUtf8", VoidPointer::make(bdsxToUtf8));
 
 #ifndef NDEBUG
 			cgate.setMethod(u"memcheck", memcheck);

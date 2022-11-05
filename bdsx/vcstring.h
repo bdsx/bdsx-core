@@ -44,8 +44,5 @@ struct StringSpan {
 	const CHR* data;
 };
 
-String<char16_t>* String_toWide(String<char16_t>* out_str, StringSpan<char>* in_str) noexcept;
-String<char>* String_toUtf8(String<char>* out_str, StringSpan<char16_t>* in_str) noexcept;
-
 extern template String<char>;
 extern template String<char16_t>;

@@ -81,13 +81,3 @@ void String_free16(void* p, size_t size) noexcept {
 	}
 	ucrtbase.free(p);
 }
-String<char16_t>* String_toWide(String<char16_t>* out_str, StringSpan<char>* in_str) noexcept {
-	Utf8ToUtf16 cvt = Text(in_str->data, in_str->size);
-	out_str->init(cvt);
-	return out_str;
-}
-String<char>* String_toUtf8(String<char>* out_str, StringSpan<char16_t>* in_str) noexcept {
-	Utf16ToUtf8 cvt = Text16(in_str->data, in_str->size);
-	out_str->init(cvt);
-	return out_str;
-}

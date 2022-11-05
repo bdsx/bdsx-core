@@ -34,8 +34,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "node-chakracore-build", "no
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "INSTALL", "INSTALL\INSTALL.vcxproj", "{8A86BAC7-1224-4273-B537-DBE065FCAC4D}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "chakra2chakracore", "chakra2chakracore\chakra2chakracore.vcxproj", "{77E07FD4-ED4B-4AAF-8B7A-D5751A742203}"
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "pdbcachegen", "pdbcachegen\pdbcachegen.vcxproj", "{0DB97EDF-3343-4575-AF19-0EF056D395B2}"
 EndProject
 Global
@@ -111,12 +109,6 @@ Global
 		{8A86BAC7-1224-4273-B537-DBE065FCAC4D}.Release|x64.Build.0 = Release|x64
 		{8A86BAC7-1224-4273-B537-DBE065FCAC4D}.ReleaseTest|x64.ActiveCfg = ReleaseTest|x64
 		{8A86BAC7-1224-4273-B537-DBE065FCAC4D}.ReleaseTest|x64.Build.0 = ReleaseTest|x64
-		{77E07FD4-ED4B-4AAF-8B7A-D5751A742203}.Debug|x64.ActiveCfg = Debug|x64
-		{77E07FD4-ED4B-4AAF-8B7A-D5751A742203}.Debug|x64.Build.0 = Debug|x64
-		{77E07FD4-ED4B-4AAF-8B7A-D5751A742203}.Release|x64.ActiveCfg = Release|x64
-		{77E07FD4-ED4B-4AAF-8B7A-D5751A742203}.Release|x64.Build.0 = Release|x64
-		{77E07FD4-ED4B-4AAF-8B7A-D5751A742203}.ReleaseTest|x64.ActiveCfg = Release|x64
-		{77E07FD4-ED4B-4AAF-8B7A-D5751A742203}.ReleaseTest|x64.Build.0 = Release|x64
 		{0DB97EDF-3343-4575-AF19-0EF056D395B2}.Debug|x64.ActiveCfg = Debug|x64
 		{0DB97EDF-3343-4575-AF19-0EF056D395B2}.Debug|x64.Build.0 = Debug|x64
 		{0DB97EDF-3343-4575-AF19-0EF056D395B2}.Release|x64.ActiveCfg = Release|x64

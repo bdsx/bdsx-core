@@ -12,19 +12,25 @@ if "%config%" == "Debug" (
 ) 
 
 call :copydll "%solutiondir%..\bdsx\bedrock_server"
-if "%config%" == "Release" (
-	call :copydll "%solutiondir%release\bdsx-core-%BDSX_CORE_VERSION%"
-	call :zip "%solutiondir%release\bdsx-core-%BDSX_CORE_VERSION%"
-)
+if "%config%" == "Release" goto :release
+goto :eof
+
+:release
+call :copydll "%solutiondir%release\bdsx-core-%BDSX_CORE_VERSION%"
+if %errorlevel% neq 0 goto :eof
+call :zip "%solutiondir%release\bdsx-core-%BDSX_CORE_VERSION%"
 goto :eof
 
 :copydll
 if not exist "%~1" mkdir "%~1"
-copy "%outdir%Chakra.dll" "%~1\Chakra.dll"
 copy "%outdir%VCRUNTIME140_1.dll" "%~1\VCRUNTIME140_1.dll"
+if %errorlevel% neq 0 goto :eof
 copy "%outdir%VCRUNTIME140_1.pdb" "%~1\VCRUNTIME140_1.pdb"
+if %errorlevel% neq 0 goto :eof
 copy "%outdir%ChakraCore.dll" "%~1\ChakraCore.dll"
+if %errorlevel% neq 0 goto :eof
 copy "%outdir%pdbcachegen.exe" "%~1\pdbcachegen.exe"
+if %errorlevel% neq 0 goto :eof
 EXIT /B 0
 
 :zip

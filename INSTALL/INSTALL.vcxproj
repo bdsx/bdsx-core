@@ -127,20 +127,17 @@
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">call %(identity) "$(OutDir)" "$(Configuration)" "$(SolutionDir)"</Command>
       <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">call %(identity) "$(OutDir)" "$(Configuration)" "$(SolutionDir)"</Command>
       <Command Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">call %(identity) "$(OutDir)" "$(Configuration)" "$(SolutionDir)"</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)..\bdsx\bedrock_server\ChakraCore.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.dll;$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.dll;$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.pdb;$(SolutionDir)..\bdsx\bedrock_server\pdbcachegen.exe;%(Outputs)</Outputs>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)..\bdsx\bedrock_server\ChakraCore.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.dll;$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.dll;$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.pdb;$(SolutionDir)..\bdsx\bedrock_server\pdbcachegen.exe;%(Outputs)</Outputs>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">$(SolutionDir)..\bdsx\bedrock_server\ChakraCore.dll;$(SolutionDir)..\bdsx\bedrock_server\Chakra.dll;$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.dll;$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.pdb;$(SolutionDir)..\bdsx\bedrock_server\pdbcachegen.exe;%(Outputs)</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.dll;$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.pdb;$(SolutionDir)..\bdsx\bedrock_server\ChakraCore.dll;$(SolutionDir)..\bdsx\bedrock_server\pdbcachegen.exe;%(Outputs)</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.dll;$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.pdb;$(SolutionDir)..\bdsx\bedrock_server\pdbcachegen.exe;%(Outputs)</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.dll;$(SolutionDir)..\bdsx\bedrock_server\VCRUNTIME140_1.pdb;$(SolutionDir)..\bdsx\bedrock_server\pdbcachegen.exe;%(Outputs)</Outputs>
       <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)VCRUNTIME140_1.dll;$(OutDir)VCRUNTIME140_1.pdb;$(OutDir)ChakraCore.dll;$(OutDir)pdbcachegen.exe</AdditionalInputs>
-      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)VCRUNTIME140_1.dll;$(OutDir)VCRUNTIME140_1.pdb;$(OutDir)ChakraCore.dll;$(OutDir)pdbcachegen.exe</AdditionalInputs>
-      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">$(OutDir)VCRUNTIME140_1.dll;$(OutDir)VCRUNTIME140_1.pdb;$(OutDir)ChakraCore.dll;$(OutDir)pdbcachegen.exe</AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)VCRUNTIME140_1.dll;$(OutDir)VCRUNTIME140_1.pdb;$(OutDir)pdbcachegen.exe</AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">$(OutDir)VCRUNTIME140_1.dll;$(OutDir)VCRUNTIME140_1.pdb;$(OutDir)pdbcachegen.exe</AdditionalInputs>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\bdsx\bdsx.vcxproj">
       <Project>{31964e2c-9e3d-4c98-a17b-589e322aa174}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\chakra2chakracore\chakra2chakracore.vcxproj">
-      <Project>{77e07fd4-ed4b-4aaf-8b7a-d5751a742203}</Project>
     </ProjectReference>
     <ProjectReference Include="..\pdbcachegen\pdbcachegen.vcxproj">
       <Project>{0db97edf-3343-4575-af19-0ef056d395b2}</Project>
