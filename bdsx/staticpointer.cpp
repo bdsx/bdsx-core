@@ -402,6 +402,99 @@ JsValue StaticPointer::getBin64(int offset) throws(kr::JsException)
 {
 	return getBin(4, offset);
 }
+int StaticPointer::isoVolatileLoad8(int offset) throws(kr::JsException) {
+	byte* p = m_address + offset;
+	try
+	{
+		return __iso_volatile_load8((char*)p);
+	}
+	catch (...)
+	{
+		accessViolation(p);
+	}
+}
+int StaticPointer::isoVolatileLoad16(int offset) throws(kr::JsException) {
+	byte* p = m_address + offset;
+	try
+	{
+		return __iso_volatile_load16((short*)p);
+	}
+	catch (...)
+	{
+		accessViolation(p);
+	}
+}
+int StaticPointer::isoVolatileLoad32(int offset) throws(kr::JsException) {
+	byte* p = m_address + offset;
+	try
+	{
+		return __iso_volatile_load32((int*)p);
+	}
+	catch (...)
+	{
+		accessViolation(p);
+	}
+}
+kr::JsValue StaticPointer::isoVolatileLoad64(int offset) throws(kr::JsException) {
+	byte* p = m_address + offset;
+	try
+	{
+		long long out = __iso_volatile_load64((long long*)p);
+		return JsValue(Text16((char16_t*)&out, (char16_t*)&out + 4));
+	}
+	catch (...)
+	{
+		accessViolation(p);
+	}
+}
+
+void StaticPointer::isoVolatileStore8(int value, int offset) throws(kr::JsException) {
+	byte* p = m_address + offset;
+	try
+	{
+		return __iso_volatile_store8((char*)p, (char)value);
+	}
+	catch (...)
+	{
+		accessViolation(p);
+	}
+}
+void StaticPointer::isoVolatileStore16(int value, int offset) throws(kr::JsException) {
+	byte* p = m_address + offset;
+	try
+	{
+		return __iso_volatile_store16((short*)p, (short)value);
+	}
+	catch (...)
+	{
+		accessViolation(p);
+	}
+}
+void StaticPointer::isoVolatileStore32(int value, int offset) throws(kr::JsException) {
+	byte* p = m_address + offset;
+	try
+	{
+		return __iso_volatile_store32((int*)p, value);
+	}
+	catch (...)
+	{
+		accessViolation(p);
+	}
+}
+void StaticPointer::isoVolatileStore64(kr::Text16 value, int offset) throws(kr::JsException) {
+	if (value.size() < 4) throw JsException(u"the first arg is not 64bits");
+	int64_t value_int = *(Unaligned<int64_t>*)value.data();
+
+	byte* p = m_address + offset;
+	try
+	{
+		return __iso_volatile_store64((long long*)p, value_int);
+	}
+	catch (...)
+	{
+		accessViolation(p);
+	}
+}
 
 int StaticPointer::interlockedIncrement16(int offset) throws(kr::JsException)
 {
@@ -585,6 +678,15 @@ void StaticPointer::initMethods(JsClassT<StaticPointer>* cls) noexcept
 	cls->setMethod(u"setInt32To64WithZero", &StaticPointer::setInt32To64WithZero);
 	cls->setMethod(u"setFloat32To64WithZero", &StaticPointer::setFloat32To64WithZero);
 	cls->setMethod(u"setFloat32", &StaticPointer::setFloat32);
+
+	cls->setMethod(u"isoVolatileLoad8", &StaticPointer::isoVolatileLoad8);
+	cls->setMethod(u"isoVolatileLoad16", &StaticPointer::isoVolatileLoad16);
+	cls->setMethod(u"isoVolatileLoad32", &StaticPointer::isoVolatileLoad32);
+	cls->setMethod(u"isoVolatileLoad64", &StaticPointer::isoVolatileLoad64);
+	cls->setMethod(u"isoVolatileStore8", &StaticPointer::isoVolatileStore8);
+	cls->setMethod(u"isoVolatileStore16", &StaticPointer::isoVolatileStore16);
+	cls->setMethod(u"isoVolatileStore32", &StaticPointer::isoVolatileStore32);
+	cls->setMethod(u"isoVolatileStore64", &StaticPointer::isoVolatileStore64);
 
 	cls->setMethod(u"interlockedIncrement16", &StaticPointer::interlockedIncrement16);
 	cls->setMethod(u"interlockedIncrement32", &StaticPointer::interlockedIncrement32);

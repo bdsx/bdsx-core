@@ -54,6 +54,16 @@ public:
 	void setInt32To64WithZero(int32_t v, int offset) throws(kr::JsException);
 	void setFloat32To64WithZero(double v, int offset) throws(kr::JsException);
 
+	int isoVolatileLoad8(int offset) throws(kr::JsException);
+	int isoVolatileLoad16(int offset) throws(kr::JsException);
+	int isoVolatileLoad32(int offset) throws(kr::JsException);
+	kr::JsValue isoVolatileLoad64(int offset) throws(kr::JsException);
+
+	void isoVolatileStore8(int value, int offset) throws(kr::JsException);
+	void isoVolatileStore16(int value, int offset) throws(kr::JsException);
+	void isoVolatileStore32(int value, int offset) throws(kr::JsException);
+	void isoVolatileStore64(kr::Text16 value, int offset) throws(kr::JsException);
+
 	int interlockedIncrement16(int offset) throws(kr::JsException);
 	int interlockedIncrement32(int offset) throws(kr::JsException);
 	kr::JsValue interlockedIncrement64(int offset) throws(kr::JsException);
