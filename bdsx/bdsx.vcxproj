@@ -61,15 +61,15 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LibraryPath>$(SolutionDir)node-chakracore\$(ConfigDir)\lib;$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(SolutionDir)node-chakracore\$(Configuration)\lib;$(LibraryPath)</LibraryPath>
     <TargetName>VCRUNTIME140_1</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LibraryPath>$(SolutionDir)node-chakracore\$(ConfigDir)\lib;$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(SolutionDir)node-chakracore\$(Configuration)\lib;$(LibraryPath)</LibraryPath>
     <TargetName>VCRUNTIME140_1</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">
-    <LibraryPath>$(SolutionDir)node-chakracore\$(ConfigDir)\lib;$(SolutionDir)node-chakracore\$(ConfigDir);$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(SolutionDir)node-chakracore\$(Configuration)\lib;$(SolutionDir)node-chakracore\$(ConfigDir);$(LibraryPath)</LibraryPath>
     <TargetName>VCRUNTIME140_1</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
