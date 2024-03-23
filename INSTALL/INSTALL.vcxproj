@@ -99,7 +99,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <CustomBuild>
-      <Message>%(Identifier)</Message>
+      <Message>%(Identity)</Message>
     </CustomBuild>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTest|x64'">
@@ -118,7 +118,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <CustomBuild>
-      <Message>%(Identifier)</Message>
+      <Message>%(Identity)</Message>
     </CustomBuild>
   </ItemDefinitionGroup>
   <ItemGroup>
